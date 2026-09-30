@@ -5,11 +5,13 @@ import { GRPC_LOADER_OPTIONS, PROTO_FILES } from '@us-man-qa-sim/ecom-contracts'
 import { ECOM_USER_V1_PACKAGE_NAME } from '@us-man-qa-sim/ecom-contracts/generated/user';
 import { ECOM_PRODUCT_V1_PACKAGE_NAME } from '@us-man-qa-sim/ecom-contracts/generated/product';
 import { ECOM_ORDER_V1_PACKAGE_NAME } from '@us-man-qa-sim/ecom-contracts/generated/order';
+import { RequestContextModule } from '../context/request-context.module';
 import { ORDER_GRPC_PACKAGE, PRODUCT_GRPC_PACKAGE, USER_GRPC_PACKAGE } from './grpc-tokens';
 import { UserGrpcClient } from './user.client';
 import { ProductGrpcClient } from './product.client';
 import { OrderGrpcClient } from './order.client';
 import { GrpcHealthIndicator } from './grpc-health.indicator';
+import { GrpcMetadataFactory } from './grpc-metadata.factory';
 
 // One ClientsModule.registerAsync entry per downstream service. All three
 // share the `common.proto` include so message types cross-referenced from the
@@ -17,6 +19,7 @@ import { GrpcHealthIndicator } from './grpc-health.indicator';
 // so ts-proto's field naming and Nest's runtime decoder stay in sync.
 @Module({
   imports: [
+    RequestContextModule,
     ClientsModule.registerAsync({
       isGlobal: false,
       clients: [
@@ -65,7 +68,19 @@ import { GrpcHealthIndicator } from './grpc-health.indicator';
       ],
     }),
   ],
-  providers: [UserGrpcClient, ProductGrpcClient, OrderGrpcClient, GrpcHealthIndicator],
-  exports: [UserGrpcClient, ProductGrpcClient, OrderGrpcClient, GrpcHealthIndicator],
+  providers: [
+    UserGrpcClient,
+    ProductGrpcClient,
+    OrderGrpcClient,
+    GrpcHealthIndicator,
+    GrpcMetadataFactory,
+  ],
+  exports: [
+    UserGrpcClient,
+    ProductGrpcClient,
+    OrderGrpcClient,
+    GrpcHealthIndicator,
+    GrpcMetadataFactory,
+  ],
 })
 export class GrpcModule {}
