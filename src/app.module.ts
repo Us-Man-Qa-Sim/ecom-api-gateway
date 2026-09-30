@@ -3,6 +3,8 @@ import { ConfigModule } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
 import { validateEnv } from './config/env.validation';
 import { HealthModule } from './health/health.module';
+import { AuthModule } from './auth/auth.module';
+import { GrpcModule } from './grpc/grpc.module';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { HealthModule } from './health/health.module';
         },
       }),
     }),
+    AuthModule,
+    GrpcModule,
     HealthModule,
   ],
 })

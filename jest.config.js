@@ -21,7 +21,9 @@ module.exports = {
       },
     ],
   },
-  transformIgnorePatterns: ['/node_modules/(?!(@nestjs|@us-man-qa-sim|rxjs|uuid|iterare|tslib)/)'],
+  transformIgnorePatterns: [
+    '/node_modules/(?!(@nestjs|@us-man-qa-sim|rxjs|uuid|iterare|tslib|jose)/)',
+  ],
   collectCoverageFrom: ['src/**/*.(t|j)s'],
   coverageDirectory: 'coverage',
   coveragePathIgnorePatterns: ['/node_modules/', '/dist/', '\\.module\\.ts$', 'main\\.ts$'],
