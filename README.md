@@ -4,14 +4,16 @@ Public HTTP gateway for the ecom platform. Sits behind NGINX (Phase 9), verifies
 
 ## Status
 
-`GW-1` – `GW-3` complete:
+`GW-1` – `GW-5` complete:
 
 - NestJS 12 HTTP app on `:3000` with pino logging, config validation (zod), multi-stage Dockerfile, Jest.
 - gRPC clients for `user`, `product` and `order` wired via `ClientsModule.registerAsync`, typed by `@us-man-qa-sim/ecom-contracts` (`UserServiceClient`, `ProductServiceClient`, `OrderServiceClient`), exposed as injectable wrappers (`UserGrpcClient`, `ProductGrpcClient`, `OrderGrpcClient`).
 - `/health` extended with a gRPC readiness ping per downstream service via `GrpcHealthIndicator` (calls `waitForReady` on each channel with a 2s deadline).
 - RS256 JWT verification via `jose`. Global `JwtAuthGuard` (registered via `APP_GUARD`) authenticates every route by default; opt out with `@Public()` and restrict by role with `@Roles('ADMIN', …)`. Verified identity attaches to `req.user` and is available in controllers via `@CurrentUser()`.
+- Request context: `RequestContextMiddleware` canonicalises `x-request-id` (or mints one) into AsyncLocalStorage, and `GrpcMetadataFactory` emits `x-user-id`, `x-user-role` and `x-request-id` on every downstream call.
+- REST routes mounted for `/auth/*`, `/users/me(/addresses)`, `/products`, `/orders`, `/admin/*` — each controller forwards to the gRPC client via a shared `callGrpc` helper (rxjs `firstValueFrom` + 5s timeout). A global `GrpcToHttpExceptionFilter` maps gRPC status codes to HTTP responses.
 
-Follow-ups (`GW-4` → `GW-11`) add metadata forwarding, REST routes, DTO validation, CORS/Helmet, throttler, Swagger and error mapping.
+Follow-ups (`GW-6` → `GW-11`) refine DTO validation (class-validator), CORS/Helmet, throttler, Swagger, per-call gRPC deadlines, and extra tests.
 
 ## Responsibilities (target — see BACKEND_PLAN.md §Phase 4)
 
@@ -113,6 +115,58 @@ The underlying verification error is logged at `debug` and never returned to the
 | `OrderGrpcClient`   | `ecom.order.v1`   | `ORDER_SERVICE_URL`   | `order.proto` + `common.proto`   |
 
 Each wrapper resolves its typed service handle in `onModuleInit()` and exposes it via `.service` (`UserServiceClient` from ts-proto). Controllers depend on the wrapper, not on `ClientGrpc` directly, so mocking one service in a test is a single `useValue` override.
+
+## REST routes (GW-5)
+
+Every route except the ones explicitly marked `@Public()` requires a valid access token. Admin routes additionally require `role=ADMIN` via `@Roles('ADMIN')`. Request bodies are forwarded to the gRPC service as-is after a minimal shape check; richer field validation (class-validator) lands in GW-6.
+
+| Method | Path                               | Auth   | Downstream RPC                 |
+| ------ | ---------------------------------- | ------ | ------------------------------ |
+| POST   | `/auth/register`                   | public | `UserService.Register`         |
+| POST   | `/auth/login`                      | public | `UserService.Login`            |
+| POST   | `/auth/refresh`                    | public | `UserService.RefreshToken`     |
+| POST   | `/auth/logout`                     | public | `UserService.Logout`           |
+| GET    | `/users/me`                        | user   | `UserService.GetMe`            |
+| GET    | `/users/me/addresses`              | user   | `UserService.ListAddresses`    |
+| POST   | `/users/me/addresses`              | user   | `UserService.CreateAddress`    |
+| GET    | `/users/me/addresses/:id`          | user   | `UserService.GetAddress`       |
+| PATCH  | `/users/me/addresses/:id`          | user   | `UserService.UpdateAddress`    |
+| DELETE | `/users/me/addresses/:id`          | user   | `UserService.DeleteAddress`    |
+| GET    | `/products`                        | public | `ProductService.ListProducts`  |
+| GET    | `/products/:id`                    | public | `ProductService.GetProduct`    |
+| POST   | `/orders`                          | user   | `OrderService.CreateOrder`     |
+| GET    | `/orders`                          | user   | `OrderService.ListMyOrders`    |
+| GET    | `/orders/:id`                      | user   | `OrderService.GetOrder`        |
+| POST   | `/orders/:id/cancel`               | user   | `OrderService.CancelOrder`     |
+| POST   | `/admin/products`                  | admin  | `ProductService.CreateProduct` |
+| PATCH  | `/admin/products/:id`              | admin  | `ProductService.UpdateProduct` |
+| DELETE | `/admin/products/:id`              | admin  | `ProductService.DeleteProduct` |
+| POST   | `/admin/products/:id/adjust-stock` | admin  | `ProductService.AdjustStock`   |
+| GET    | `/admin/orders`                    | admin  | `OrderService.ListAllOrders`   |
+| POST   | `/admin/orders/:id/ship`           | admin  | `OrderService.ShipOrder`       |
+| POST   | `/admin/orders/:id/deliver`        | admin  | `OrderService.DeliverOrder`    |
+
+Shared response shapes:
+
+- `Money` → `{ amountMinor: number, currency: "ISO4217" }` (integer minor units per the plan).
+- `Timestamp` → ISO 8601 string (or `null` when unset).
+- `Role` → `"CUSTOMER" | "ADMIN"` (string, not the proto numeric enum).
+- `OrderStatus` → `"PENDING" | "CONFIRMED" | "SHIPPED" | "DELIVERED" | "CANCELLED"`.
+- List endpoints return `{ items|orders|products, pagination }` with `pagination: { total, page, pageSize, totalPages }`.
+
+A global `GrpcToHttpExceptionFilter` maps downstream gRPC errors into HTTP responses:
+
+| gRPC status                                        | HTTP                   |
+| -------------------------------------------------- | ---------------------- |
+| `INVALID_ARGUMENT`, `OUT_OF_RANGE`                 | 400                    |
+| `UNAUTHENTICATED`                                  | 401                    |
+| `PERMISSION_DENIED`                                | 403                    |
+| `NOT_FOUND`                                        | 404                    |
+| `ALREADY_EXISTS`, `FAILED_PRECONDITION`, `ABORTED` | 409                    |
+| `RESOURCE_EXHAUSTED`                               | 429                    |
+| `DEADLINE_EXCEEDED`                                | 504                    |
+| `UNAVAILABLE`                                      | 503                    |
+| anything else                                      | 500 (scrubbed message) |
 
 ## Health
 

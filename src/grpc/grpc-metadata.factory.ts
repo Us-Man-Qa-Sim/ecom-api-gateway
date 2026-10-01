@@ -1,10 +1,6 @@
 import { Metadata } from '@grpc/grpc-js';
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import {
-  HEADER_REQUEST_ID,
-  HEADER_USER_ID,
-  HEADER_USER_ROLE,
-} from '../context/request-context';
+import { HEADER_REQUEST_ID, HEADER_USER_ID, HEADER_USER_ROLE } from '../context/request-context';
 import { RequestContextService } from '../context/request-context.service';
 
 // Builds the gRPC Metadata forwarded on every downstream call. Reading from

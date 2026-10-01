@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_FILTER } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import type { IncomingMessage } from 'node:http';
 import { validateEnv } from './config/env.validation';
@@ -8,6 +9,12 @@ import { AuthModule } from './auth/auth.module';
 import { GrpcModule } from './grpc/grpc.module';
 import { RequestContextModule } from './context/request-context.module';
 import { HEADER_REQUEST_ID } from './context/request-context';
+import { GrpcToHttpExceptionFilter } from './common/errors/grpc-to-http.filter';
+import { AuthRoutesModule } from './routes/auth/auth-routes.module';
+import { UsersRoutesModule } from './routes/users/users-routes.module';
+import { ProductsRoutesModule } from './routes/products/products-routes.module';
+import { OrdersRoutesModule } from './routes/orders/orders-routes.module';
+import { AdminRoutesModule } from './routes/admin/admin-routes.module';
 
 @Module({
   imports: [
@@ -44,6 +51,17 @@ import { HEADER_REQUEST_ID } from './context/request-context';
     AuthModule,
     GrpcModule,
     HealthModule,
+    AuthRoutesModule,
+    UsersRoutesModule,
+    ProductsRoutesModule,
+    OrdersRoutesModule,
+    AdminRoutesModule,
+  ],
+  providers: [
+    // Global exception filter — maps gRPC status codes to HTTP responses so
+    // every REST route gets consistent error shapes without per-controller
+    // UseFilters. GW-6 will add richer error payloads on top of this.
+    { provide: APP_FILTER, useClass: GrpcToHttpExceptionFilter },
   ],
 })
 export class AppModule {}

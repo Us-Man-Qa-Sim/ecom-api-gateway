@@ -29,7 +29,10 @@ function fakeRes(): Response & { headers: Record<string, string> } {
 }
 
 function httpCtx(user?: AuthenticatedIdentity): ExecutionContext {
-  const req: Request & { user?: AuthenticatedIdentity } = { headers: {}, user } as unknown as Request & { user?: AuthenticatedIdentity };
+  const req: Request & { user?: AuthenticatedIdentity } = {
+    headers: {},
+    user,
+  } as unknown as Request & { user?: AuthenticatedIdentity };
   return {
     getType: () => 'http',
     switchToHttp: () => ({ getRequest: () => req }),
