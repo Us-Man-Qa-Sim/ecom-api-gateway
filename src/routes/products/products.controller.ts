@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import type {
   GetProductResponse,
-  ListProductsRequest,
   ListProductsResponse,
 } from '@us-man-qa-sim/ecom-contracts/generated/product';
 import { Public } from '../../auth/decorators/public.decorator';
@@ -16,11 +15,11 @@ import { ProductGrpcClient } from '../../grpc/product.client';
 import { GrpcMetadataFactory } from '../../grpc/grpc-metadata.factory';
 import { callGrpc } from '../../common/grpc-call.util';
 import { toPaginationView, toProductView } from '../../common/mappers/product.view';
-import { parsePagination } from '../../common/dto/pagination.dto';
+import { ListProductsQueryDto } from './dto/list-products.query';
 
 // Public product browse. Admin writes (create/update/delete, AdjustStock) live
-// under /admin/products in AdminController so the authorization is obvious from
-// the route tree.
+// under /admin/products in AdminController so the authorization is obvious
+// from the route tree.
 @Controller('products')
 @Public()
 export class ProductsController {
@@ -30,10 +29,28 @@ export class ProductsController {
   ) {}
 
   @Get()
-  async list(@Query() query: Record<string, unknown>) {
-    const request = this.coerceListRequest(query);
+  async list(@Query() query: ListProductsQueryDto) {
+    // Cross-field check — class-validator can express it with a custom
+    // decorator but it's one line here and keeps the DTO declarative.
+    if (
+      query.minPriceMinor !== undefined &&
+      query.maxPriceMinor !== undefined &&
+      query.minPriceMinor > query.maxPriceMinor
+    ) {
+      throw new BadRequestException('minPriceMinor must be <= maxPriceMinor');
+    }
     const response = await callGrpc<ListProductsResponse>(
-      this.products.service.listProducts(request, this.metadata.buildAnonymous()),
+      this.products.service.listProducts(
+        {
+          pagination: { page: query.page, pageSize: query.pageSize },
+          category: query.category,
+          search: query.search,
+          isActive: query.isActive,
+          minPriceMinor: query.minPriceMinor,
+          maxPriceMinor: query.maxPriceMinor,
+        },
+        this.metadata.buildAnonymous(),
+      ),
     );
     return {
       products: (response.products ?? []).map(toProductView),
@@ -51,52 +68,4 @@ export class ProductsController {
     }
     return toProductView(response.product);
   }
-
-  private coerceListRequest(query: Record<string, unknown>): ListProductsRequest {
-    const pagination = parsePagination(query);
-    const minPriceMinor = optionalNonNegativeInt(query, 'minPriceMinor');
-    const maxPriceMinor = optionalNonNegativeInt(query, 'maxPriceMinor');
-    if (
-      minPriceMinor !== undefined &&
-      maxPriceMinor !== undefined &&
-      minPriceMinor > maxPriceMinor
-    ) {
-      throw new BadRequestException('minPriceMinor must be <= maxPriceMinor');
-    }
-    return {
-      pagination,
-      category: optionalString(query, 'category'),
-      search: optionalString(query, 'search'),
-      isActive: optionalBoolean(query, 'isActive'),
-      minPriceMinor,
-      maxPriceMinor,
-    };
-  }
-}
-
-function optionalString(obj: Record<string, unknown>, field: string): string | undefined {
-  const value = obj[field];
-  if (value === undefined || value === null || value === '') return undefined;
-  if (typeof value !== 'string') {
-    throw new BadRequestException(`${field} must be a string`);
-  }
-  return value;
-}
-
-function optionalBoolean(obj: Record<string, unknown>, field: string): boolean | undefined {
-  const value = obj[field];
-  if (value === undefined || value === null || value === '') return undefined;
-  if (value === 'true' || value === true) return true;
-  if (value === 'false' || value === false) return false;
-  throw new BadRequestException(`${field} must be a boolean`);
-}
-
-function optionalNonNegativeInt(obj: Record<string, unknown>, field: string): number | undefined {
-  const value = obj[field];
-  if (value === undefined || value === null || value === '') return undefined;
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new BadRequestException(`${field} must be a non-negative integer`);
-  }
-  return parsed;
 }

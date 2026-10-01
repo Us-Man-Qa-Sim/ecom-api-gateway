@@ -1,8 +1,11 @@
-import { BadRequestException } from '@nestjs/common';
 import { status as GrpcStatus } from '@grpc/grpc-js';
 import { AuthController } from '../../src/routes/auth/auth.controller';
 import { Role as ProtoRole } from '@us-man-qa-sim/ecom-contracts/generated/user';
 import { errObs, expectMetadata, makeMetadataFactory, makeUserClient, okObs } from './_helpers';
+
+// Unit tests exercise the happy path of each handler. Input validation (the
+// coercion the controller used to do by hand) is enforced by the global
+// ValidationPipe and covered in `validation.e2e.spec.ts`.
 
 function controllerWithRegister(registerMock: jest.Mock): AuthController {
   return new AuthController(
@@ -29,7 +32,7 @@ describe('AuthController', () => {
 
       const result = await ctrl.register({
         email: 'a@b.com',
-        password: 'pw',
+        password: 'password-ok',
         firstName: 'A',
         lastName: 'B',
       });
@@ -37,7 +40,7 @@ describe('AuthController', () => {
       expect(register).toHaveBeenCalledTimes(1);
       expect(register.mock.calls[0][0]).toEqual({
         email: 'a@b.com',
-        password: 'pw',
+        password: 'password-ok',
         firstName: 'A',
         lastName: 'B',
       });
@@ -46,18 +49,6 @@ describe('AuthController', () => {
         user: { id: 'u-1', email: 'a@b.com', role: 'CUSTOMER' },
         tokens: null,
       });
-    });
-
-    it('rejects a non-object body with 400', async () => {
-      const ctrl = controllerWithRegister(jest.fn());
-      await expect(ctrl.register('not-json')).rejects.toBeInstanceOf(BadRequestException);
-    });
-
-    it('rejects missing email with 400', async () => {
-      const ctrl = controllerWithRegister(jest.fn());
-      await expect(
-        ctrl.register({ password: 'pw', firstName: 'A', lastName: 'B' }),
-      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 
@@ -72,7 +63,7 @@ describe('AuthController', () => {
         },
       });
       const ctrl = new AuthController(makeUserClient({ login }), makeMetadataFactory());
-      const result = await ctrl.login({ email: 'a@b.com', password: 'pw' });
+      const result = await ctrl.login({ email: 'a@b.com', password: 'password-ok' });
       expect(result.tokens).toMatchObject({ accessToken: 'at', refreshToken: 'rt' });
       expect(result.user.role).toBe('CUSTOMER');
     });
@@ -80,7 +71,9 @@ describe('AuthController', () => {
     it('surfaces downstream UNAUTHENTICATED', async () => {
       const login = errObs(GrpcStatus.UNAUTHENTICATED, 'bad credentials');
       const ctrl = new AuthController(makeUserClient({ login }), makeMetadataFactory());
-      await expect(ctrl.login({ email: 'a@b.com', password: 'pw' })).rejects.toMatchObject({
+      await expect(
+        ctrl.login({ email: 'a@b.com', password: 'password-ok' }),
+      ).rejects.toMatchObject({
         code: GrpcStatus.UNAUTHENTICATED,
       });
     });
@@ -99,14 +92,6 @@ describe('AuthController', () => {
       const result = await ctrl.refresh({ refreshToken: 'rt' });
       expect(result.tokens.accessToken).toBe('at2');
       expect(result.tokens.accessTokenExpiresAt).toBeNull();
-    });
-
-    it('requires refreshToken', async () => {
-      const ctrl = new AuthController(
-        makeUserClient({ refreshToken: jest.fn() }),
-        makeMetadataFactory(),
-      );
-      await expect(ctrl.refresh({})).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 

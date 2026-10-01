@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { Role as ProtoRole } from '@us-man-qa-sim/ecom-contracts/generated/user';
 import { UsersController } from '../../src/routes/users/users.controller';
 import { expectMetadata, makeMetadataFactory, makeUserClient, okObs } from './_helpers';
@@ -61,13 +61,6 @@ describe('UsersController', () => {
       expect(result.addresses[0]).toMatchObject({ id: 'a-1', isDefault: true });
     });
 
-    it('rejects create with missing required field', async () => {
-      const ctrl = new UsersController(makeUserClient({ createAddress: jest.fn() }), metadata);
-      await expect(ctrl.createAddress({ street: '1 lane' })).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
-    });
-
     it('creates an address with isDefault defaulting to false', async () => {
       const createAddress = okObs({ address: sampleAddress });
       const ctrl = new UsersController(makeUserClient({ createAddress }), metadata);
@@ -78,6 +71,19 @@ describe('UsersController', () => {
         country: 'FR',
       });
       expect(createAddress.mock.calls[0][0]).toMatchObject({ isDefault: false });
+    });
+
+    it('forwards isDefault when the client explicitly set it', async () => {
+      const createAddress = okObs({ address: sampleAddress });
+      const ctrl = new UsersController(makeUserClient({ createAddress }), metadata);
+      await ctrl.createAddress({
+        street: '1 lane',
+        city: 'city',
+        postalCode: '00000',
+        country: 'FR',
+        isDefault: true,
+      });
+      expect(createAddress.mock.calls[0][0]).toMatchObject({ isDefault: true });
     });
 
     it('deletes an address and returns 204', async () => {

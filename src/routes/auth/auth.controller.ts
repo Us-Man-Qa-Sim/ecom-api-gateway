@@ -1,12 +1,8 @@
 import { BadRequestException, Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import type {
-  LoginRequest,
   LoginResponse,
-  LogoutRequest,
   LogoutResponse,
-  RefreshTokenRequest,
   RefreshTokenResponse,
-  RegisterRequest,
   RegisterResponse,
 } from '@us-man-qa-sim/ecom-contracts/generated/user';
 import { Public } from '../../auth/decorators/public.decorator';
@@ -14,12 +10,12 @@ import { GrpcMetadataFactory } from '../../grpc/grpc-metadata.factory';
 import { UserGrpcClient } from '../../grpc/user.client';
 import { callGrpc } from '../../common/grpc-call.util';
 import { toAuthTokensView, toUserView } from '../../common/mappers/user.view';
+import { LoginDto, LogoutDto, RefreshTokenDto, RegisterDto } from './dto/auth.dto';
 
-// Thin REST façade over the ecom.user.v1 auth RPCs. Request bodies are passed
-// through to the user-service as-is; detailed field validation (class-validator)
-// is GW-6 — for GW-5 we check the handful of fields the controller actually
-// touches so that malformed input returns 400 rather than silently flowing to
-// gRPC and surfacing as INVALID_ARGUMENT or worse.
+// Thin REST façade over the ecom.user.v1 auth RPCs. Request bodies are shaped
+// by class-validator DTOs (GW-6): the global ValidationPipe strips unknown
+// fields, enforces types, and surfaces field-level 400s before anything
+// reaches gRPC.
 @Controller('auth')
 @Public()
 export class AuthController {
@@ -29,10 +25,9 @@ export class AuthController {
   ) {}
 
   @Post('register')
-  async register(@Body() body: unknown) {
-    const request = this.coerceRegister(body);
+  async register(@Body() body: RegisterDto) {
     const response = await callGrpc<RegisterResponse>(
-      this.users.service.register(request, this.metadata.buildAnonymous()),
+      this.users.service.register(body, this.metadata.buildAnonymous()),
     );
     if (!response.user) {
       // Should never happen — user-service always returns the row on success.
@@ -48,10 +43,9 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(@Body() body: unknown) {
-    const request = this.coerceLogin(body);
+  async login(@Body() body: LoginDto) {
     const response = await callGrpc<LoginResponse>(
-      this.users.service.login(request, this.metadata.buildAnonymous()),
+      this.users.service.login(body, this.metadata.buildAnonymous()),
     );
     if (!response.user || !response.tokens) {
       throw new BadRequestException('Invalid response from user service');
@@ -64,10 +58,9 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  async refresh(@Body() body: unknown) {
-    const request = this.coerceRefresh(body);
+  async refresh(@Body() body: RefreshTokenDto) {
     const response = await callGrpc<RefreshTokenResponse>(
-      this.users.service.refreshToken(request, this.metadata.buildAnonymous()),
+      this.users.service.refreshToken(body, this.metadata.buildAnonymous()),
     );
     if (!response.tokens) {
       throw new BadRequestException('Invalid response from user service');
@@ -77,56 +70,12 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async logout(@Body() body: unknown): Promise<void> {
+  async logout(@Body() body: LogoutDto): Promise<void> {
     // Logout takes the refresh token as its credential (see D4: refresh is
     // rotating and family-revoked on reuse). Access token is not required —
     // a logged-out user may already be unable to call authenticated routes.
-    const request = this.coerceLogout(body);
     await callGrpc<LogoutResponse>(
-      this.users.service.logout(request, this.metadata.buildAnonymous()),
+      this.users.service.logout(body, this.metadata.buildAnonymous()),
     );
-  }
-
-  private coerceRegister(body: unknown): RegisterRequest {
-    const b = this.asObject(body);
-    return {
-      email: this.requireString(b, 'email'),
-      password: this.requireString(b, 'password'),
-      firstName: this.requireString(b, 'firstName'),
-      lastName: this.requireString(b, 'lastName'),
-    };
-  }
-
-  private coerceLogin(body: unknown): LoginRequest {
-    const b = this.asObject(body);
-    return {
-      email: this.requireString(b, 'email'),
-      password: this.requireString(b, 'password'),
-    };
-  }
-
-  private coerceRefresh(body: unknown): RefreshTokenRequest {
-    const b = this.asObject(body);
-    return { refreshToken: this.requireString(b, 'refreshToken') };
-  }
-
-  private coerceLogout(body: unknown): LogoutRequest {
-    const b = this.asObject(body);
-    return { refreshToken: this.requireString(b, 'refreshToken') };
-  }
-
-  private asObject(body: unknown): Record<string, unknown> {
-    if (!body || typeof body !== 'object' || Array.isArray(body)) {
-      throw new BadRequestException('Request body must be a JSON object');
-    }
-    return body as Record<string, unknown>;
-  }
-
-  private requireString(obj: Record<string, unknown>, field: string): string {
-    const value = obj[field];
-    if (typeof value !== 'string' || value.length === 0) {
-      throw new BadRequestException(`${field} is required`);
-    }
-    return value;
   }
 }

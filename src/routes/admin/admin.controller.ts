@@ -13,20 +13,15 @@ import {
   Query,
 } from '@nestjs/common';
 import type {
-  AdjustStockRequest,
   AdjustStockResponse,
   AttributesUpdate,
-  CreateProductRequest,
   CreateProductResponse,
   DeleteProductResponse,
   ImagesUpdate,
-  UpdateProductRequest,
   UpdateProductResponse,
 } from '@us-man-qa-sim/ecom-contracts/generated/product';
-import type { Money } from '@us-man-qa-sim/ecom-contracts/generated/common';
 import type {
   DeliverOrderResponse,
-  ListAllOrdersRequest,
   ListAllOrdersResponse,
   ShipOrderResponse,
 } from '@us-man-qa-sim/ecom-contracts/generated/order';
@@ -37,8 +32,13 @@ import { ProductGrpcClient } from '../../grpc/product.client';
 import { callGrpc } from '../../common/grpc-call.util';
 import { toOrderView } from '../../common/mappers/order.view';
 import { toPaginationView, toProductView } from '../../common/mappers/product.view';
-import { parsePagination } from '../../common/dto/pagination.dto';
-import { isOrderStatus, stringToProtoOrderStatus } from '../../common/mappers/proto.mapper';
+import { stringToProtoOrderStatus } from '../../common/mappers/proto.mapper';
+import {
+  AdjustStockDto,
+  CreateProductDto,
+  UpdateProductDto,
+} from './dto/product-admin.dto';
+import { ListAllOrdersQueryDto } from '../orders/dto/list-orders.query';
 
 // Everything under /admin/* requires the ADMIN role. The downstream services
 // also enforce their own ownership/role rules; this decorator exists so a
@@ -55,10 +55,20 @@ export class AdminController {
   // ---- Product admin ----------------------------------------------------
 
   @Post('products')
-  async createProduct(@Body() body: unknown) {
-    const request = coerceCreateProduct(body);
+  async createProduct(@Body() body: CreateProductDto) {
     const response = await callGrpc<CreateProductResponse>(
-      this.products.service.createProduct(request, this.metadata.build()),
+      this.products.service.createProduct(
+        {
+          name: body.name,
+          description: body.description,
+          category: body.category,
+          price: { amountMinor: body.price.amountMinor, currency: body.price.currency },
+          initialStock: body.initialStock,
+          attributes: body.attributes ?? {},
+          images: body.images ?? [],
+        },
+        this.metadata.build(),
+      ),
     );
     if (!response.product) {
       throw new BadRequestException('Invalid response from product service');
@@ -67,10 +77,29 @@ export class AdminController {
   }
 
   @Patch('products/:id')
-  async updateProduct(@Param('id') id: string, @Body() body: unknown) {
-    const request = coerceUpdateProduct(id, body);
+  async updateProduct(@Param('id') id: string, @Body() body: UpdateProductDto) {
+    // Proto wraps attributes/images in presence-carrying messages so an absent
+    // field (don't touch) is distinguishable from an empty replacement.
+    const attributes: AttributesUpdate | undefined =
+      body.attributes === undefined ? undefined : { values: body.attributes };
+    const images: ImagesUpdate | undefined =
+      body.images === undefined ? undefined : { urls: body.images };
     const response = await callGrpc<UpdateProductResponse>(
-      this.products.service.updateProduct(request, this.metadata.build()),
+      this.products.service.updateProduct(
+        {
+          productId: id,
+          name: body.name,
+          description: body.description,
+          category: body.category,
+          price: body.price
+            ? { amountMinor: body.price.amountMinor, currency: body.price.currency }
+            : undefined,
+          attributes,
+          images,
+          isActive: body.isActive,
+        },
+        this.metadata.build(),
+      ),
     );
     if (!response.product) {
       throw new NotFoundException('Product not found');
@@ -87,10 +116,12 @@ export class AdminController {
   }
 
   @Post('products/:id/adjust-stock')
-  async adjustStock(@Param('id') id: string, @Body() body: unknown) {
-    const request = coerceAdjustStock(id, body);
+  async adjustStock(@Param('id') id: string, @Body() body: AdjustStockDto) {
     const response = await callGrpc<AdjustStockResponse>(
-      this.products.service.adjustStock(request, this.metadata.build()),
+      this.products.service.adjustStock(
+        { productId: id, delta: body.delta },
+        this.metadata.build(),
+      ),
     );
     if (!response.product) {
       throw new NotFoundException('Product not found');
@@ -101,23 +132,16 @@ export class AdminController {
   // ---- Order admin ------------------------------------------------------
 
   @Get('orders')
-  async listAllOrders(@Query() query: Record<string, unknown>) {
-    const pagination = parsePagination(query);
-    const statusRaw = query['status'];
-    let status: number | undefined;
-    if (statusRaw !== undefined && statusRaw !== null && statusRaw !== '') {
-      if (!isOrderStatus(statusRaw)) {
-        throw new BadRequestException(
-          'status must be one of PENDING, CONFIRMED, SHIPPED, DELIVERED, CANCELLED',
-        );
-      }
-      status = stringToProtoOrderStatus(statusRaw);
-    }
-    const userIdRaw = query['userId'];
-    const userId = typeof userIdRaw === 'string' && userIdRaw.length > 0 ? userIdRaw : undefined;
-    const request: ListAllOrdersRequest = { pagination, status, userId };
+  async listAllOrders(@Query() query: ListAllOrdersQueryDto) {
     const response = await callGrpc<ListAllOrdersResponse>(
-      this.orders.service.listAllOrders(request, this.metadata.build()),
+      this.orders.service.listAllOrders(
+        {
+          pagination: { page: query.page, pageSize: query.pageSize },
+          status: query.status ? stringToProtoOrderStatus(query.status) : undefined,
+          userId: query.userId,
+        },
+        this.metadata.build(),
+      ),
     );
     return {
       orders: (response.orders ?? []).map(toOrderView),
@@ -148,141 +172,4 @@ export class AdminController {
     }
     return toOrderView(response.order);
   }
-}
-
-// ---- Coercers (GW-6 will replace these with class-validator DTOs) --------
-
-function coerceCreateProduct(body: unknown): CreateProductRequest {
-  const b = asObject(body);
-  return {
-    name: requireString(b, 'name'),
-    description: requireString(b, 'description'),
-    category: requireString(b, 'category'),
-    price: requireMoney(b['price']),
-    initialStock: requireNonNegativeInt(b, 'initialStock'),
-    attributes: optionalAttributes(b['attributes']) ?? {},
-    images: optionalStringArray(b['images']) ?? [],
-  };
-}
-
-function coerceUpdateProduct(productId: string, body: unknown): UpdateProductRequest {
-  const b = asObject(body);
-  const price = optionalMoney(b['price']);
-  const attributesValues = optionalAttributes(b['attributes']);
-  const imagesUrls = optionalStringArray(b['images']);
-  // Proto wraps attributes/images in presence-carrying messages so an absent
-  // field (don't touch) is distinguishable from an empty replacement.
-  const attributes: AttributesUpdate | undefined =
-    attributesValues === undefined ? undefined : { values: attributesValues };
-  const images: ImagesUpdate | undefined =
-    imagesUrls === undefined ? undefined : { urls: imagesUrls };
-  return {
-    productId,
-    name: optionalString(b, 'name'),
-    description: optionalString(b, 'description'),
-    category: optionalString(b, 'category'),
-    price,
-    attributes,
-    images,
-    isActive: optionalBoolean(b, 'isActive'),
-  };
-}
-
-function coerceAdjustStock(productId: string, body: unknown): AdjustStockRequest {
-  const b = asObject(body);
-  const delta = b['delta'];
-  if (!Number.isInteger(delta)) {
-    throw new BadRequestException('delta must be an integer');
-  }
-  return { productId, delta: delta as number };
-}
-
-function asObject(body: unknown): Record<string, unknown> {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    throw new BadRequestException('Request body must be a JSON object');
-  }
-  return body as Record<string, unknown>;
-}
-
-function requireString(obj: Record<string, unknown>, field: string): string {
-  const value = obj[field];
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new BadRequestException(`${field} is required`);
-  }
-  return value;
-}
-
-function optionalString(obj: Record<string, unknown>, field: string): string | undefined {
-  const value = obj[field];
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== 'string') {
-    throw new BadRequestException(`${field} must be a string`);
-  }
-  return value;
-}
-
-function requireNonNegativeInt(obj: Record<string, unknown>, field: string): number {
-  const value = obj[field];
-  if (!Number.isInteger(value) || (value as number) < 0) {
-    throw new BadRequestException(`${field} must be a non-negative integer`);
-  }
-  return value as number;
-}
-
-function optionalBoolean(obj: Record<string, unknown>, field: string): boolean | undefined {
-  const value = obj[field];
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== 'boolean') {
-    throw new BadRequestException(`${field} must be a boolean`);
-  }
-  return value;
-}
-
-function requireMoney(value: unknown): Money {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new BadRequestException('price must be an object { amountMinor, currency }');
-  }
-  const obj = value as Record<string, unknown>;
-  const amountMinor = obj['amountMinor'];
-  const currency = obj['currency'];
-  if (!Number.isInteger(amountMinor) || (amountMinor as number) < 0) {
-    throw new BadRequestException('price.amountMinor must be a non-negative integer');
-  }
-  if (typeof currency !== 'string' || currency.length !== 3) {
-    throw new BadRequestException('price.currency must be a 3-letter ISO 4217 code');
-  }
-  return { amountMinor: amountMinor as number, currency };
-}
-
-function optionalMoney(value: unknown): Money | undefined {
-  if (value === undefined || value === null) return undefined;
-  return requireMoney(value);
-}
-
-function optionalAttributes(value: unknown): Record<string, string> | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== 'object' || Array.isArray(value)) {
-    throw new BadRequestException('attributes must be an object of string→string');
-  }
-  const result: Record<string, string> = {};
-  for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof v !== 'string') {
-      throw new BadRequestException(`attributes.${key} must be a string`);
-    }
-    result[key] = v;
-  }
-  return result;
-}
-
-function optionalStringArray(value: unknown): string[] | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (!Array.isArray(value)) {
-    throw new BadRequestException('images must be an array of strings');
-  }
-  return value.map((v, i) => {
-    if (typeof v !== 'string') {
-      throw new BadRequestException(`images[${i}] must be a string`);
-    }
-    return v;
-  });
 }

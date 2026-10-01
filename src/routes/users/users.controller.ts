@@ -12,19 +12,18 @@ import {
   Post,
 } from '@nestjs/common';
 import type {
-  CreateAddressRequest,
   CreateAddressResponse,
   DeleteAddressRequest,
   GetAddressResponse,
   GetMeResponse,
   ListAddressesResponse,
-  UpdateAddressRequest,
   UpdateAddressResponse,
 } from '@us-man-qa-sim/ecom-contracts/generated/user';
 import { GrpcMetadataFactory } from '../../grpc/grpc-metadata.factory';
 import { UserGrpcClient } from '../../grpc/user.client';
 import { callGrpc } from '../../common/grpc-call.util';
 import { toAddressView, toUserView } from '../../common/mappers/user.view';
+import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
 
 // /users/me and /users/me/addresses — all authenticated (the global
 // JwtAuthGuard enforces this because no @Public() marker is applied here).
@@ -57,10 +56,20 @@ export class UsersController {
   }
 
   @Post('addresses')
-  async createAddress(@Body() body: unknown) {
-    const request = this.coerceCreateAddress(body);
+  async createAddress(@Body() body: CreateAddressDto) {
     const response = await callGrpc<CreateAddressResponse>(
-      this.users.service.createAddress(request, this.metadata.build()),
+      this.users.service.createAddress(
+        {
+          label: body.label,
+          street: body.street,
+          city: body.city,
+          state: body.state,
+          postalCode: body.postalCode,
+          country: body.country,
+          isDefault: body.isDefault ?? false,
+        },
+        this.metadata.build(),
+      ),
     );
     if (!response.address) {
       throw new BadRequestException('Invalid response from user service');
@@ -80,10 +89,21 @@ export class UsersController {
   }
 
   @Patch('addresses/:id')
-  async updateAddress(@Param('id') id: string, @Body() body: unknown) {
-    const request = this.coerceUpdateAddress(id, body);
+  async updateAddress(@Param('id') id: string, @Body() body: UpdateAddressDto) {
     const response = await callGrpc<UpdateAddressResponse>(
-      this.users.service.updateAddress(request, this.metadata.build()),
+      this.users.service.updateAddress(
+        {
+          addressId: id,
+          label: body.label,
+          street: body.street,
+          city: body.city,
+          state: body.state,
+          postalCode: body.postalCode,
+          country: body.country,
+          isDefault: body.isDefault,
+        },
+        this.metadata.build(),
+      ),
     );
     if (!response.address) {
       throw new BadRequestException('Invalid response from user service');
@@ -97,66 +117,4 @@ export class UsersController {
     const request: DeleteAddressRequest = { addressId: id };
     await callGrpc(this.users.service.deleteAddress(request, this.metadata.build()));
   }
-
-  private coerceCreateAddress(body: unknown): CreateAddressRequest {
-    const b = asObject(body);
-    return {
-      label: optionalString(b, 'label'),
-      street: requireString(b, 'street'),
-      city: requireString(b, 'city'),
-      state: optionalString(b, 'state'),
-      postalCode: requireString(b, 'postalCode'),
-      country: requireString(b, 'country'),
-      isDefault: optionalBoolean(b, 'isDefault') ?? false,
-    };
-  }
-
-  private coerceUpdateAddress(addressId: string, body: unknown): UpdateAddressRequest {
-    const b = asObject(body);
-    // All fields optional on update; the request still needs the id so the
-    // downstream service can locate the row.
-    return {
-      addressId,
-      label: optionalString(b, 'label'),
-      street: optionalString(b, 'street'),
-      city: optionalString(b, 'city'),
-      state: optionalString(b, 'state'),
-      postalCode: optionalString(b, 'postalCode'),
-      country: optionalString(b, 'country'),
-      isDefault: optionalBoolean(b, 'isDefault'),
-    };
-  }
-}
-
-function asObject(body: unknown): Record<string, unknown> {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    throw new BadRequestException('Request body must be a JSON object');
-  }
-  return body as Record<string, unknown>;
-}
-
-function requireString(obj: Record<string, unknown>, field: string): string {
-  const value = obj[field];
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new BadRequestException(`${field} is required`);
-  }
-  return value;
-}
-
-function optionalString(obj: Record<string, unknown>, field: string): string | undefined {
-  const value = obj[field];
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== 'string') {
-    throw new BadRequestException(`${field} must be a string`);
-  }
-  return value;
-}
-
-function optionalBoolean(obj: Record<string, unknown>, field: string): boolean | undefined {
-  const value = obj[field];
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== 'boolean') {
-    throw new BadRequestException(`${field} must be a boolean`);
-  }
-  return value;
 }

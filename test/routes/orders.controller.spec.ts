@@ -1,6 +1,9 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { OrderStatus as ProtoOrderStatus } from '@us-man-qa-sim/ecom-contracts/generated/order';
 import { OrdersController } from '../../src/routes/orders/orders.controller';
+import { CreateOrderDto } from '../../src/routes/orders/dto/create-order.dto';
+import { CancelOrderDto } from '../../src/routes/orders/dto/cancel-order.dto';
+import { ListMyOrdersQueryDto } from '../../src/routes/orders/dto/list-orders.query';
 import { makeMetadataFactory, makeOrderClient, okObs } from './_helpers';
 
 const sampleOrder = {
@@ -30,35 +33,44 @@ const sampleOrder = {
 
 const metadata = makeMetadataFactory({ userId: 'u-1', role: 'CUSTOMER' });
 
+function createOrderDto(data: {
+  addressId: string;
+  items: Array<{ productId: string; quantity: number }>;
+}): CreateOrderDto {
+  const dto = new CreateOrderDto();
+  dto.addressId = data.addressId;
+  dto.items = data.items as CreateOrderDto['items'];
+  return dto;
+}
+
+function cancelOrderDto(reason?: string): CancelOrderDto {
+  const dto = new CancelOrderDto();
+  dto.reason = reason;
+  return dto;
+}
+
+function listMyOrdersQueryDto(overrides: Partial<ListMyOrdersQueryDto> = {}): ListMyOrdersQueryDto {
+  const q = new ListMyOrdersQueryDto();
+  Object.assign(q, overrides);
+  return q;
+}
+
 describe('OrdersController', () => {
   describe('create', () => {
     it('maps the request through and returns the order', async () => {
       const createOrder = okObs({ order: sampleOrder });
       const ctrl = new OrdersController(makeOrderClient({ createOrder }), metadata);
-      const result = await ctrl.create({
-        addressId: 'a-1',
-        items: [{ productId: 'p-1', quantity: 2 }],
-      });
+      const result = await ctrl.create(
+        createOrderDto({
+          addressId: 'a-1',
+          items: [{ productId: 'p-1', quantity: 2 }],
+        }),
+      );
       expect(createOrder.mock.calls[0][0]).toEqual({
         addressId: 'a-1',
         items: [{ productId: 'p-1', quantity: 2 }],
       });
       expect(result).toMatchObject({ id: 'o-1', status: 'PENDING' });
-    });
-
-    it('rejects missing items', async () => {
-      const ctrl = new OrdersController(makeOrderClient({ createOrder: jest.fn() }), metadata);
-      await expect(ctrl.create({ addressId: 'a-1', items: [] })).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
-      await expect(ctrl.create({ addressId: 'a-1' })).rejects.toBeInstanceOf(BadRequestException);
-    });
-
-    it('rejects non-positive quantity', async () => {
-      const ctrl = new OrdersController(makeOrderClient({ createOrder: jest.fn() }), metadata);
-      await expect(
-        ctrl.create({ addressId: 'a-1', items: [{ productId: 'p-1', quantity: 0 }] }),
-      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 
@@ -66,15 +78,17 @@ describe('OrdersController', () => {
     it('passes status filter through as the enum value', async () => {
       const listMyOrders = okObs({ orders: [sampleOrder], pagination: undefined });
       const ctrl = new OrdersController(makeOrderClient({ listMyOrders }), metadata);
-      await ctrl.listMine({ status: 'CONFIRMED' });
+      await ctrl.listMine(listMyOrdersQueryDto({ status: 'CONFIRMED' }));
       expect(listMyOrders.mock.calls[0][0]).toMatchObject({
         status: ProtoOrderStatus.ORDER_STATUS_CONFIRMED,
       });
     });
 
-    it('rejects unknown status', async () => {
-      const ctrl = new OrdersController(makeOrderClient({ listMyOrders: jest.fn() }), metadata);
-      await expect(ctrl.listMine({ status: 'PAID' })).rejects.toBeInstanceOf(BadRequestException);
+    it('omits status when unset', async () => {
+      const listMyOrders = okObs({ orders: [], pagination: undefined });
+      const ctrl = new OrdersController(makeOrderClient({ listMyOrders }), metadata);
+      await ctrl.listMine(listMyOrdersQueryDto());
+      expect(listMyOrders.mock.calls[0][0]).toMatchObject({ status: undefined });
     });
   });
 
@@ -90,14 +104,14 @@ describe('OrdersController', () => {
     it('forwards an optional reason', async () => {
       const cancelOrder = okObs({ order: sampleOrder });
       const ctrl = new OrdersController(makeOrderClient({ cancelOrder }), metadata);
-      await ctrl.cancel('o-1', { reason: 'changed mind' });
+      await ctrl.cancel('o-1', cancelOrderDto('changed mind'));
       expect(cancelOrder.mock.calls[0][0]).toEqual({ orderId: 'o-1', reason: 'changed mind' });
     });
 
-    it('tolerates a missing body', async () => {
+    it('tolerates a missing reason', async () => {
       const cancelOrder = okObs({ order: sampleOrder });
       const ctrl = new OrdersController(makeOrderClient({ cancelOrder }), metadata);
-      await ctrl.cancel('o-1', undefined);
+      await ctrl.cancel('o-1', cancelOrderDto());
       expect(cancelOrder.mock.calls[0][0]).toEqual({ orderId: 'o-1', reason: undefined });
     });
   });
