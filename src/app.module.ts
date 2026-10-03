@@ -3,13 +3,14 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
-import type { IncomingMessage } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { validateEnv } from './config/env.validation';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { GrpcModule } from './grpc/grpc.module';
 import { RequestContextModule } from './context/request-context.module';
 import { HEADER_REQUEST_ID } from './context/request-context';
+import { resolveRequestId } from './context/request-context.middleware';
 import { GrpcToHttpExceptionFilter } from './common/errors/grpc-to-http.filter';
 import { AuthRoutesModule } from './routes/auth/auth-routes.module';
 import { UsersRoutesModule } from './routes/users/users-routes.module';
@@ -24,8 +25,6 @@ import { AdminRoutesModule } from './routes/admin/admin-routes.module';
       cache: true,
       validate: validateEnv,
     }),
-    // RequestContextModule is imported before LoggerModule so its middleware
-    // runs first and canonicalises `x-request-id` before pino-http reads it.
     RequestContextModule,
     LoggerModule.forRootAsync({
       useFactory: () => ({
@@ -36,15 +35,17 @@ import { AdminRoutesModule } from './routes/admin/admin-routes.module';
               ? undefined
               : { target: 'pino-pretty', options: { singleLine: true, colorize: true } },
           customProps: () => ({ service: 'api-gateway' }),
-          // RequestContextMiddleware canonicalises this header before pino-http
-          // sees the request, so log records carry the same id we forward on
-          // gRPC metadata to the downstream services. The middleware guarantees
-          // the header is a non-empty string; the fallback is only for the
-          // narrow window (before middleware runs) where pino calls genReqId.
-          genReqId: (req: IncomingMessage) => {
-            const value = req.headers[HEADER_REQUEST_ID];
-            const resolved = Array.isArray(value) ? value[0] : value;
-            return resolved ?? 'unknown';
+          // nestjs-pino's middleware runs BEFORE RequestContextMiddleware
+          // (module import order does not change that), so the id has to be
+          // canonicalised here: accept a sane client-supplied x-request-id or
+          // mint one, and write it back so the context middleware — which
+          // calls the same idempotent resolver — forwards the identical value
+          // on gRPC metadata and in the response header.
+          genReqId: (req: IncomingMessage, res: ServerResponse) => {
+            const requestId = resolveRequestId(req.headers[HEADER_REQUEST_ID]);
+            req.headers[HEADER_REQUEST_ID] = requestId;
+            res.setHeader(HEADER_REQUEST_ID, requestId);
+            return requestId;
           },
         },
       }),

@@ -128,10 +128,7 @@ describe('JwtAuthGuard', () => {
   it('accepts any role listed in a multi-role requirement', async () => {
     const identity: AuthenticatedIdentity = { userId: 'u1', role: 'CUSTOMER' };
     const { ctx } = makeContext({ authorization: 'Bearer token' });
-    const guard = new JwtAuthGuard(
-      makeReflector(false, ['ADMIN', 'CUSTOMER']),
-      makeJwt(identity),
-    );
+    const guard = new JwtAuthGuard(makeReflector(false, ['ADMIN', 'CUSTOMER']), makeJwt(identity));
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
   });
 

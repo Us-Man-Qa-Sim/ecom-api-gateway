@@ -1,5 +1,5 @@
 import {
-  BadRequestException,
+  BadGatewayException,
   Body,
   Controller,
   Delete,
@@ -97,7 +97,7 @@ export class AdminController {
       this.timeouts.standard,
     );
     if (!response.product) {
-      throw new BadRequestException('Invalid response from product service');
+      throw new BadGatewayException('Invalid response from product service');
     }
     return toProductView(response.product);
   }

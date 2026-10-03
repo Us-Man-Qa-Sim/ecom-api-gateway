@@ -30,9 +30,8 @@ USER app
 
 EXPOSE 3000
 
-# /health returns 200 while the process is up and memory is under the limits
-# in health.controller.ts. GW-2 will extend it to ping downstream gRPC
-# services, at which point the healthcheck starts covering readiness too.
+# /health is the readiness probe: memory limits plus gRPC reachability of
+# user/product/order (health.controller.ts). /health/live is liveness only.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=3 \
   CMD wget -q -O /dev/null "http://127.0.0.1:${HTTP_PORT:-3000}/health" || exit 1
 

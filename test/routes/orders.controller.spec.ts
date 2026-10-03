@@ -59,11 +59,7 @@ describe('OrdersController', () => {
   describe('create', () => {
     it('maps the request through and returns the order', async () => {
       const createOrder = okObs({ order: sampleOrder });
-      const ctrl = new OrdersController(
-        makeOrderClient({ createOrder }),
-        metadata,
-        makeTimeouts(),
-      );
+      const ctrl = new OrdersController(makeOrderClient({ createOrder }), metadata, makeTimeouts());
       const result = await ctrl.create(
         createOrderDto({
           addressId: 'a-1',
@@ -107,11 +103,7 @@ describe('OrdersController', () => {
   describe('get', () => {
     it('404s on missing order', async () => {
       const getOrder = okObs({ order: undefined });
-      const ctrl = new OrdersController(
-        makeOrderClient({ getOrder }),
-        metadata,
-        makeTimeouts(),
-      );
+      const ctrl = new OrdersController(makeOrderClient({ getOrder }), metadata, makeTimeouts());
       await expect(ctrl.get('o-1')).rejects.toBeInstanceOf(NotFoundException);
     });
   });
@@ -119,22 +111,14 @@ describe('OrdersController', () => {
   describe('cancel', () => {
     it('forwards an optional reason', async () => {
       const cancelOrder = okObs({ order: sampleOrder });
-      const ctrl = new OrdersController(
-        makeOrderClient({ cancelOrder }),
-        metadata,
-        makeTimeouts(),
-      );
+      const ctrl = new OrdersController(makeOrderClient({ cancelOrder }), metadata, makeTimeouts());
       await ctrl.cancel('o-1', cancelOrderDto('changed mind'));
       expect(cancelOrder.mock.calls[0][0]).toEqual({ orderId: 'o-1', reason: 'changed mind' });
     });
 
     it('tolerates a missing reason', async () => {
       const cancelOrder = okObs({ order: sampleOrder });
-      const ctrl = new OrdersController(
-        makeOrderClient({ cancelOrder }),
-        metadata,
-        makeTimeouts(),
-      );
+      const ctrl = new OrdersController(makeOrderClient({ cancelOrder }), metadata, makeTimeouts());
       await ctrl.cancel('o-1', cancelOrderDto());
       expect(cancelOrder.mock.calls[0][0]).toEqual({ orderId: 'o-1', reason: undefined });
     });

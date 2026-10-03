@@ -41,9 +41,9 @@ describe('env validation', () => {
   });
 
   it('rejects a non-numeric GRPC_TIMEOUT_STANDARD_MS', () => {
-    expect(() =>
-      validateEnv({ NODE_ENV: 'test', GRPC_TIMEOUT_STANDARD_MS: 'later' }),
-    ).toThrow(/GRPC_TIMEOUT_STANDARD_MS/);
+    expect(() => validateEnv({ NODE_ENV: 'test', GRPC_TIMEOUT_STANDARD_MS: 'later' })).toThrow(
+      /GRPC_TIMEOUT_STANDARD_MS/,
+    );
   });
 
   it('parses SWAGGER_ENABLED case-insensitively (anything but "true" → false)', () => {
@@ -68,6 +68,15 @@ describe('env validation', () => {
     );
     // Anything else resolves to false — safer default than true.
     expect(validateEnv({ NODE_ENV: 'test', CORS_CREDENTIALS: 'yes' }).CORS_CREDENTIALS).toBe(false);
+  });
+
+  it('parses TRUST_PROXY as boolean, hop count or address list', () => {
+    expect(validateEnv({ NODE_ENV: 'test' }).TRUST_PROXY).toBe(false);
+    expect(validateEnv({ NODE_ENV: 'test', TRUST_PROXY: 'TRUE' }).TRUST_PROXY).toBe(true);
+    expect(validateEnv({ NODE_ENV: 'test', TRUST_PROXY: '1' }).TRUST_PROXY).toBe(1);
+    expect(
+      validateEnv({ NODE_ENV: 'test', TRUST_PROXY: ' loopback, 10.0.0.0/8 ' }).TRUST_PROXY,
+    ).toBe('loopback, 10.0.0.0/8');
   });
 
   it('honours body-limit overrides', () => {

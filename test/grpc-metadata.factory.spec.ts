@@ -38,9 +38,7 @@ describe('GrpcMetadataFactory.build (authenticated)', () => {
   });
 
   it('throws 500 when the context has userId but no role', () => {
-    const factory = new GrpcMetadataFactory(
-      stubContext({ requestId: 'req-1', userId: 'u-1' }),
-    );
+    const factory = new GrpcMetadataFactory(stubContext({ requestId: 'req-1', userId: 'u-1' }));
     expect(() => factory.build()).toThrow(InternalServerErrorException);
   });
 });

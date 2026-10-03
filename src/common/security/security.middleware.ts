@@ -13,6 +13,11 @@ export function applySecurityMiddleware(app: NestExpressApplication, config: Con
   const corsCredentials = config.getOrThrow<boolean>('CORS_CREDENTIALS');
   const jsonLimit = config.getOrThrow<string>('BODY_LIMIT_JSON');
   const urlencodedLimit = config.getOrThrow<string>('BODY_LIMIT_URLENCODED');
+  const trustProxy = config.getOrThrow<boolean | number | string>('TRUST_PROXY');
+
+  // Must be set before any request is handled: ThrottlerGuard keys on req.ip,
+  // and req.ip only honours X-Forwarded-For when the proxy is trusted.
+  app.set('trust proxy', trustProxy);
 
   // Helmet with its defaults: HSTS, X-Content-Type-Options, Referrer-Policy,
   // X-Frame-Options=SAMEORIGIN, and a conservative CSP. The gateway serves

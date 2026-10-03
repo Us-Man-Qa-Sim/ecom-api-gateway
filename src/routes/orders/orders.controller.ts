@@ -1,5 +1,5 @@
 import {
-  BadRequestException,
+  BadGatewayException,
   Body,
   Controller,
   Get,
@@ -74,7 +74,7 @@ export class OrdersController {
       this.timeouts.long,
     );
     if (!response.order) {
-      throw new BadRequestException('Invalid response from order service');
+      throw new BadGatewayException('Invalid response from order service');
     }
     return toOrderView(response.order);
   }
@@ -136,7 +136,7 @@ export class OrdersController {
       this.timeouts.standard,
     );
     if (!response.order) {
-      throw new BadRequestException('Invalid response from order service');
+      throw new BadGatewayException('Invalid response from order service');
     }
     return toOrderView(response.order);
   }

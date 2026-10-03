@@ -28,8 +28,6 @@ const corsOriginsSchema = z
       .filter((entry) => entry.length > 0),
   );
 
-// Config surface for GW-1 → GW-3 and GW-7. GW-8/GW-9 will extend this schema
-// further with throttler settings and Swagger toggles as those tasks land.
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
@@ -81,6 +79,23 @@ export const envSchema = z.object({
   // mirrors JSON so stray form posts don't slip past the JSON cap.
   BODY_LIMIT_JSON: z.string().default('100kb'),
   BODY_LIMIT_URLENCODED: z.string().default('100kb'),
+
+  // Express `trust proxy` (GW-7/GW-8). Behind NGINX every connection comes
+  // from the proxy, so without this req.ip is NGINX's address and ALL clients
+  // share one throttler bucket. Accepts what Express accepts: `true`/`false`,
+  // a hop count (`1`), or a comma-separated list of trusted addresses/subnets
+  // (`loopback, 172.16.0.0/12`). Default `false` — only trust X-Forwarded-For
+  // when a proxy you control is actually in front.
+  TRUST_PROXY: z
+    .string()
+    .default('false')
+    .transform((value): boolean | number | string => {
+      const trimmed = value.trim();
+      if (trimmed.toLowerCase() === 'true') return true;
+      if (trimmed.toLowerCase() === 'false' || trimmed === '') return false;
+      if (/^\d+$/.test(trimmed)) return Number(trimmed);
+      return trimmed;
+    }),
 
   // Rate limiting (GW-8). In-memory store means limits are PER INSTANCE —
   // behind a load balancer with N replicas, a client effectively gets N× the

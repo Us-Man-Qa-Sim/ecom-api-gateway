@@ -143,7 +143,23 @@ describe('GrpcToHttpExceptionFilter', () => {
     const res = makeRes();
     filter.catch({ code: grpcCode, details: 'boom' }, makeHost(res));
     expect(res.statusCode).toBe(httpStatus);
-    expect(res.body).toEqual({ statusCode: httpStatus, error: label, message: 'boom' });
+    // 4xx forward the service's deliberate message; 5xx never forward
+    // upstream details (they can carry internal hosts / stack fragments).
+    const message = httpStatus >= 500 ? label : 'boom';
+    expect(res.body).toEqual({ statusCode: httpStatus, error: label, message });
+  });
+
+  it('does not leak grpc-js transport details on UNAVAILABLE', () => {
+    const res = makeRes();
+    filter.catch(
+      {
+        code: GrpcStatus.UNAVAILABLE,
+        details: 'No connection established. Last error: connect ECONNREFUSED 10.0.3.7:5001',
+      },
+      makeHost(res),
+    );
+    expect(res.statusCode).toBe(HttpStatus.SERVICE_UNAVAILABLE);
+    expect(JSON.stringify(res.body)).not.toContain('10.0.3.7');
   });
 
   it('falls back to message when details is empty', () => {

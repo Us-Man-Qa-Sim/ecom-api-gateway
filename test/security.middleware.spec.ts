@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Module, Post } from '@nestjs/common';
+import { Body, Controller, Get, Module, Post, Req } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -14,6 +14,11 @@ class EchoController {
   @Get('/')
   ping(): { ok: true } {
     return { ok: true };
+  }
+
+  @Get('/ip')
+  ip(@Req() req: { ip?: string }): { ip?: string } {
+    return { ip: req.ip };
   }
 
   @Post('/echo')
@@ -173,6 +178,26 @@ describe('applySecurityMiddleware', () => {
         .set('Content-Type', 'application/json')
         .send({ big });
       expect(res.status).toBe(413);
+    });
+  });
+
+  describe('trust proxy', () => {
+    it('ignores X-Forwarded-For by default (client cannot spoof its throttle key)', async () => {
+      const app = await makeApp({});
+      const res = await request(app.getHttpServer())
+        .get('/ip')
+        .set('X-Forwarded-For', '203.0.113.9');
+      expect(res.body.ip).not.toBe('203.0.113.9');
+      await app.close();
+    });
+
+    it('uses the forwarded client address when TRUST_PROXY is set', async () => {
+      const app = await makeApp({ TRUST_PROXY: '1' });
+      const res = await request(app.getHttpServer())
+        .get('/ip')
+        .set('X-Forwarded-For', '203.0.113.9');
+      expect(res.body.ip).toBe('203.0.113.9');
+      await app.close();
     });
   });
 });

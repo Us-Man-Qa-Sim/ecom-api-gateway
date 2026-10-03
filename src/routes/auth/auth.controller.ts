@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { BadGatewayException, Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiCreatedResponse,
@@ -62,7 +62,7 @@ export class AuthController {
     );
     if (!response.user) {
       // Should never happen — user-service always returns the row on success.
-      throw new BadRequestException('Invalid response from user service');
+      throw new BadGatewayException('Invalid response from user service');
     }
     return {
       user: toUserView(response.user),
@@ -84,7 +84,7 @@ export class AuthController {
       this.timeouts.standard,
     );
     if (!response.user || !response.tokens) {
-      throw new BadRequestException('Invalid response from user service');
+      throw new BadGatewayException('Invalid response from user service');
     }
     return {
       user: toUserView(response.user),
@@ -107,7 +107,7 @@ export class AuthController {
       this.timeouts.fast,
     );
     if (!response.tokens) {
-      throw new BadRequestException('Invalid response from user service');
+      throw new BadGatewayException('Invalid response from user service');
     }
     return { tokens: toAuthTokensView(response.tokens) };
   }

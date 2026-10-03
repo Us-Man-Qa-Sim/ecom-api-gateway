@@ -1,5 +1,5 @@
 import {
-  BadRequestException,
+  BadGatewayException,
   Body,
   Controller,
   Delete,
@@ -109,7 +109,7 @@ export class UsersController {
       this.timeouts.standard,
     );
     if (!response.address) {
-      throw new BadRequestException('Invalid response from user service');
+      throw new BadGatewayException('Invalid response from user service');
     }
     return toAddressView(response.address);
   }
@@ -155,7 +155,7 @@ export class UsersController {
       this.timeouts.standard,
     );
     if (!response.address) {
-      throw new BadRequestException('Invalid response from user service');
+      throw new BadGatewayException('Invalid response from user service');
     }
     return toAddressView(response.address);
   }

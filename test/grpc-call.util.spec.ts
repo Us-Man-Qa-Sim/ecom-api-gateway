@@ -1,10 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { Subject, throwError } from 'rxjs';
-import {
-  callGrpc,
-  DEFAULT_GRPC_TIMEOUT_MS,
-  GrpcCallTimeouts,
-} from '../src/common/grpc-call.util';
+import { callGrpc, DEFAULT_GRPC_TIMEOUT_MS, GrpcCallTimeouts } from '../src/common/grpc-call.util';
 
 function stubConfig(values: Record<string, unknown>): ConfigService {
   return {
@@ -79,7 +75,12 @@ describe('callGrpc', () => {
 
   it('rejects when the Observable errors (gRPC error shape passes through)', async () => {
     const err = { code: 5, details: 'not found' };
-    await expect(callGrpc(throwError(() => err), 1_000)).rejects.toEqual(err);
+    await expect(
+      callGrpc(
+        throwError(() => err),
+        1_000,
+      ),
+    ).rejects.toEqual(err);
   });
 
   it('rejects with a TimeoutError when no value arrives before the deadline', async () => {

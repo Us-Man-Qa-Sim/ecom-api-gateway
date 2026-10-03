@@ -11,7 +11,10 @@ const REQUEST_ID_MAX_LENGTH = 128;
 const REQUEST_ID_PATTERN = /^[\x21-\x7e]+$/;
 
 // Runs before guards so an unauthenticated 401 still gets logged with the
-// same request id the client sees. Wrapping `next()` in ALS.run keeps the
+// same request id the client sees. pino-http's genReqId (app.module.ts) calls
+// the same resolveRequestId first — Nest registers nestjs-pino's middleware
+// ahead of this one — and resolveRequestId is idempotent on an already
+// canonical id, so both layers always agree on the value. Wrapping `next()` in ALS.run keeps the
 // store alive for guards, interceptors, the controller, and every downstream
 // gRPC call — that is what lets GrpcMetadataFactory read the id without any
 // per-call plumbing.
@@ -27,7 +30,7 @@ export class RequestContextMiddleware implements NestMiddleware {
   }
 }
 
-function resolveRequestId(raw: string | string[] | undefined): string {
+export function resolveRequestId(raw: string | string[] | undefined): string {
   const candidate = Array.isArray(raw) ? raw[0] : raw;
   if (
     typeof candidate === 'string' &&

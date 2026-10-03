@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
+import { TerminusModule } from '@nestjs/terminus';
 import { GRPC_LOADER_OPTIONS, PROTO_FILES } from '@us-man-qa-sim/ecom-contracts';
 import { ECOM_USER_V1_PACKAGE_NAME } from '@us-man-qa-sim/ecom-contracts/generated/user';
 import { ECOM_PRODUCT_V1_PACKAGE_NAME } from '@us-man-qa-sim/ecom-contracts/generated/product';
@@ -21,6 +22,11 @@ import { GrpcMetadataFactory } from './grpc-metadata.factory';
 @Module({
   imports: [
     RequestContextModule,
+    // GrpcHealthIndicator injects Terminus' HealthIndicatorService, so the
+    // module that provides the indicator has to import Terminus itself —
+    // HealthModule importing it is not enough (Nest resolves providers in
+    // their declaring module).
+    TerminusModule,
     ClientsModule.registerAsync({
       isGlobal: false,
       clients: [

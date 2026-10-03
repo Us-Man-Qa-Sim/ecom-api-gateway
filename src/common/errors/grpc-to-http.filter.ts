@@ -48,6 +48,7 @@ const HTTP_ERROR_LABEL: Partial<Record<HttpStatus, string>> = {
   [HttpStatus.TOO_MANY_REQUESTS]: 'Too Many Requests',
   [HttpStatus.INTERNAL_SERVER_ERROR]: 'Internal Server Error',
   [HttpStatus.NOT_IMPLEMENTED]: 'Not Implemented',
+  [HttpStatus.BAD_GATEWAY]: 'Bad Gateway',
   [HttpStatus.SERVICE_UNAVAILABLE]: 'Service Unavailable',
   [HttpStatus.GATEWAY_TIMEOUT]: 'Gateway Timeout',
 };
@@ -107,6 +108,18 @@ export class GrpcToHttpExceptionFilter implements ExceptionFilter {
     const code = typeof grpcError.code === 'number' ? grpcError.code : undefined;
     if (code !== undefined && code in GRPC_TO_HTTP) {
       const status = GRPC_TO_HTTP[code];
+      if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+        // 5xx details come from grpc-js or an upstream crash, not from a
+        // deliberate service response — e.g. UNAVAILABLE carries
+        // "connect ECONNREFUSED 10.0.3.7:5001". Log them, return the label.
+        this.logger.warn({ err: exception }, `Upstream gRPC error (code ${code})`);
+        res.status(status).json({
+          statusCode: status,
+          error: HTTP_ERROR_LABEL[status] ?? HttpStatus[status] ?? 'Error',
+          message: HTTP_ERROR_LABEL[status] ?? 'Upstream error',
+        });
+        return;
+      }
       res.status(status).json({
         statusCode: status,
         error: HTTP_ERROR_LABEL[status] ?? HttpStatus[status] ?? 'Error',

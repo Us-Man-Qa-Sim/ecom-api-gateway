@@ -4,17 +4,16 @@ Public HTTP gateway for the ecom platform. Sits behind NGINX (Phase 9), verifies
 
 ## Status
 
-`GW-1` – `GW-9` partially complete:
+Phase 4 (`GW-1` – `GW-11`) complete:
 
 - NestJS 12 HTTP app on `:3000` with pino logging, config validation (zod), multi-stage Dockerfile, Jest.
-- gRPC clients for `user`, `product` and `order` wired via `ClientsModule.registerAsync`, typed by `@us-man-qa-sim/ecom-contracts` (`UserServiceClient`, `ProductServiceClient`, `OrderServiceClient`), exposed as injectable wrappers (`UserGrpcClient`, `ProductGrpcClient`, `OrderGrpcClient`).
-- `/health` extended with a gRPC readiness ping per downstream service via `GrpcHealthIndicator` (calls `waitForReady` on each channel with a 2s deadline).
-- RS256 JWT verification via `jose`. Global `JwtAuthGuard` (registered via `APP_GUARD`) authenticates every route by default; opt out with `@Public()` and restrict by role with `@Roles('ADMIN', …)`. Verified identity attaches to `req.user` and is available in controllers via `@CurrentUser()`.
-- Request context: `RequestContextMiddleware` canonicalises `x-request-id` (or mints one) into AsyncLocalStorage, and `GrpcMetadataFactory` emits `x-user-id`, `x-user-role` and `x-request-id` on every downstream call.
-- REST routes mounted for `/auth/*`, `/users/me(/addresses)`, `/products`, `/orders`, `/admin/*` — each controller forwards to the gRPC client via a shared `callGrpc` helper (rxjs `firstValueFrom` + 5s timeout). A global `GrpcToHttpExceptionFilter` maps gRPC status codes to HTTP responses.
-- OpenAPI/Swagger (`GW-9`): spec served at `/docs-json`, UI at `/docs`. Toggleable with `SWAGGER_ENABLED` and `SWAGGER_PATH`. Every DTO is annotated with `@ApiProperty`; every controller is tagged and has operation summaries and typed response schemas; the UI exposes the bearer scheme so tokens from `/auth/login` can be pasted straight in.
-
-Follow-ups (`GW-6` → `GW-11`) refine DTO validation (class-validator), CORS/Helmet, throttler, per-call gRPC deadlines, and extra tests.
+- gRPC clients for `user`, `product` and `order` wired via `ClientsModule.registerAsync`, typed by `@us-man-qa-sim/ecom-contracts`, exposed as injectable wrappers (`UserGrpcClient`, `ProductGrpcClient`, `OrderGrpcClient`).
+- RS256 JWT verification via `jose`; global `JwtAuthGuard` with `@Public()` / `@Roles()` / `@CurrentUser()`.
+- Request context: `x-request-id` is canonicalised (or minted) once per request and shared by pino logs, the response header and gRPC metadata; `x-user-id` / `x-user-role` are forwarded on every authenticated call.
+- REST routes for `/auth/*`, `/users/me(/addresses)`, `/products`, `/orders`, `/admin/*`, with class-validator DTOs and a global `GrpcToHttpExceptionFilter`.
+- Helmet, CORS allow-list, body-size caps, `trust proxy` knob, in-memory rate limiting (stricter on `/auth/*`).
+- Per-call gRPC deadlines by profile (`fast` / `standard` / `long`), OpenAPI/Swagger at `/docs`.
+- Tests: unit tests per component plus `test/app.e2e.spec.ts`, which boots the real `AppModule` with stubbed gRPC clients.
 
 ## Responsibilities (target — see BACKEND_PLAN.md §Phase 4)
 
@@ -43,13 +42,14 @@ npm run start:dev            # pino-pretty output
 curl http://localhost:3000/health
 ```
 
-Container:
+Container (from `../infra`; generates the shared JWT key pair on first run):
 
 ```bash
-docker compose --profile app up -d api-gateway
+make keys                                   # or: node scripts/gen-jwt-keys.mjs
+docker compose --profile app up -d user-service api-gateway
 ```
 
-The gateway `depends_on` all three backend services in `infra/docker-compose.yml`.
+The gateway only waits for `user-service` to be healthy. product/order are soft dependencies: their routes return `503` (and `/health` reports them down) until they are up.
 
 ## Scripts
 
@@ -66,21 +66,31 @@ The gateway `depends_on` all three backend services in `infra/docker-compose.yml
 
 See `.env.example`. All variables are validated at boot with zod; unknown or malformed values crash the process before Nest starts.
 
-| Variable                      | Default          | Notes                                                            |
-| ----------------------------- | ---------------- | ---------------------------------------------------------------- |
-| `NODE_ENV`                    | `development`    | `development` \| `test` \| `production`                          |
-| `LOG_LEVEL`                   | `info`           | pino level                                                       |
-| `HTTP_HOST`                   | `0.0.0.0`        |                                                                  |
-| `HTTP_PORT`                   | `3000`           | Public port                                                      |
-| `USER_SERVICE_URL`            | `localhost:5001` | gRPC target for `ecom.user.v1.UserService`                       |
-| `PRODUCT_SERVICE_URL`         | `localhost:5002` | gRPC target for `ecom.product.v1.ProductService`                 |
-| `ORDER_SERVICE_URL`           | `localhost:5003` | gRPC target for `ecom.order.v1.OrderService`                     |
-| `JWT_PUBLIC_KEY_PATH`         | _(none)_         | RSA public PEM matching user-service. Required except in test    |
-| `JWT_ISSUER`                  | `user-service`   | Must match user-service `JWT_ISSUER`                             |
-| `JWT_AUDIENCE`                | `ecom-api`       | Must match user-service `JWT_AUDIENCE`                           |
-| `JWT_CLOCK_TOLERANCE_SECONDS` | `5`              | Skew allowance between the two hosts                             |
-| `SWAGGER_ENABLED`             | `true`           | Mount the Swagger UI + JSON spec. `false` disables both          |
-| `SWAGGER_PATH`                | `docs`           | UI mounts at `/${SWAGGER_PATH}`, JSON at `/${SWAGGER_PATH}-json` |
+| Variable                      | Default                 | Notes                                                                                |
+| ----------------------------- | ----------------------- | ------------------------------------------------------------------------------------ |
+| `NODE_ENV`                    | `development`           | `development` \| `test` \| `production`                                              |
+| `LOG_LEVEL`                   | `info`                  | pino level                                                                           |
+| `HTTP_HOST`                   | `0.0.0.0`               |                                                                                      |
+| `HTTP_PORT`                   | `3000`                  | Public port                                                                          |
+| `USER_SERVICE_URL`            | `localhost:5001`        | gRPC target for `ecom.user.v1.UserService`                                           |
+| `PRODUCT_SERVICE_URL`         | `localhost:5002`        | gRPC target for `ecom.product.v1.ProductService`                                     |
+| `ORDER_SERVICE_URL`           | `localhost:5003`        | gRPC target for `ecom.order.v1.OrderService`                                         |
+| `JWT_PUBLIC_KEY_PATH`         | _(none)_                | RSA public PEM matching user-service. Required except in test                        |
+| `JWT_ISSUER`                  | `user-service`          | Must match user-service `JWT_ISSUER`                                                 |
+| `JWT_AUDIENCE`                | `ecom-api`              | Must match user-service `JWT_AUDIENCE`                                               |
+| `JWT_CLOCK_TOLERANCE_SECONDS` | `5`                     | Skew allowance between the two hosts                                                 |
+| `GRPC_TIMEOUT_FAST_MS`        | `2000`                  | Deadline for single-row reads                                                        |
+| `GRPC_TIMEOUT_STANDARD_MS`    | `5000`                  | Deadline for mutations and list calls                                                |
+| `GRPC_TIMEOUT_LONG_MS`        | `10000`                 | Deadline for fan-outs and admin scans                                                |
+| `CORS_ORIGINS`                | `http://localhost:3001` | Comma-separated exact-match origins                                                  |
+| `CORS_CREDENTIALS`            | `false`                 | Send `Access-Control-Allow-Credentials`                                              |
+| `BODY_LIMIT_JSON`             | `100kb`                 | JSON body cap (413 above it)                                                         |
+| `BODY_LIMIT_URLENCODED`       | `100kb`                 | Form body cap                                                                        |
+| `TRUST_PROXY`                 | `false`                 | Express `trust proxy`; set `1` behind NGINX so rate limits key on the real client IP |
+| `THROTTLE_TTL_MS`             | `60000`                 | Global rate-limit window (per instance)                                              |
+| `THROTTLE_LIMIT`              | `60`                    | Requests per window per IP; `/auth/*` is fixed at 10/min                             |
+| `SWAGGER_ENABLED`             | `true`                  | Mount the Swagger UI + JSON spec. `false` disables both                              |
+| `SWAGGER_PATH`                | `docs`                  | UI mounts at `/${SWAGGER_PATH}`, JSON at `/${SWAGGER_PATH}-json`                     |
 
 ## Auth model (GW-3)
 
@@ -121,7 +131,7 @@ Each wrapper resolves its typed service handle in `onModuleInit()` and exposes i
 
 ## REST routes (GW-5)
 
-Every route except the ones explicitly marked `@Public()` requires a valid access token. Admin routes additionally require `role=ADMIN` via `@Roles('ADMIN')`. Request bodies are forwarded to the gRPC service as-is after a minimal shape check; richer field validation (class-validator) lands in GW-6.
+Every route except the ones explicitly marked `@Public()` requires a valid access token. Admin routes additionally require `role=ADMIN` via `@Roles('ADMIN')`. Request bodies and query strings are validated by class-validator DTOs (unknown fields → `400` with a per-field `errors[]`) before anything reaches gRPC.
 
 | Method | Path                               | Auth   | Downstream RPC                 |
 | ------ | ---------------------------------- | ------ | ------------------------------ |
@@ -159,17 +169,21 @@ Shared response shapes:
 
 A global `GrpcToHttpExceptionFilter` maps downstream gRPC errors into HTTP responses:
 
-| gRPC status                                        | HTTP                   |
-| -------------------------------------------------- | ---------------------- |
-| `INVALID_ARGUMENT`, `OUT_OF_RANGE`                 | 400                    |
-| `UNAUTHENTICATED`                                  | 401                    |
-| `PERMISSION_DENIED`                                | 403                    |
-| `NOT_FOUND`                                        | 404                    |
-| `ALREADY_EXISTS`, `FAILED_PRECONDITION`, `ABORTED` | 409                    |
-| `RESOURCE_EXHAUSTED`                               | 429                    |
-| `DEADLINE_EXCEEDED`                                | 504                    |
-| `UNAVAILABLE`                                      | 503                    |
-| anything else                                      | 500 (scrubbed message) |
+| gRPC status                                        | HTTP |
+| -------------------------------------------------- | ---- |
+| `INVALID_ARGUMENT`, `OUT_OF_RANGE`                 | 400  |
+| `UNAUTHENTICATED`                                  | 401  |
+| `PERMISSION_DENIED`                                | 403  |
+| `NOT_FOUND`                                        | 404  |
+| `ALREADY_EXISTS`, `FAILED_PRECONDITION`, `ABORTED` | 409  |
+| `CANCELLED`                                        | 408  |
+| `RESOURCE_EXHAUSTED`                               | 429  |
+| `UNIMPLEMENTED`                                    | 501  |
+| `UNAVAILABLE`                                      | 503  |
+| `DEADLINE_EXCEEDED`, gateway-side deadline         | 504  |
+| `INTERNAL`, `UNKNOWN`, `DATA_LOSS`, unknown shapes | 500  |
+
+4xx responses carry the downstream service's message. 5xx responses never do — gRPC transport errors include internal hostnames/IPs — so the client gets the generic status label and the real error is logged. A well-formed RPC that returns an empty/malformed payload is a `502 Bad Gateway`.
 
 ## Health
 
