@@ -41,7 +41,7 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 import { GrpcMetadataFactory } from '../../grpc/grpc-metadata.factory';
 import { OrderGrpcClient } from '../../grpc/order.client';
 import { ProductGrpcClient } from '../../grpc/product.client';
-import { callGrpc } from '../../common/grpc-call.util';
+import { callGrpc, GrpcCallTimeouts } from '../../common/grpc-call.util';
 import { toOrderView } from '../../common/mappers/order.view';
 import { toPaginationView, toProductView } from '../../common/mappers/product.view';
 import { stringToProtoOrderStatus } from '../../common/mappers/proto.mapper';
@@ -71,6 +71,7 @@ export class AdminController {
     private readonly products: ProductGrpcClient,
     private readonly orders: OrderGrpcClient,
     private readonly metadata: GrpcMetadataFactory,
+    private readonly timeouts: GrpcCallTimeouts,
   ) {}
 
   // ---- Product admin ----------------------------------------------------
@@ -79,6 +80,7 @@ export class AdminController {
   @ApiOperation({ summary: 'Create a product.' })
   @ApiCreatedResponse({ type: ProductResponse })
   async createProduct(@Body() body: CreateProductDto) {
+    // standard: single document insert + outbox write.
     const response = await callGrpc<CreateProductResponse>(
       this.products.service.createProduct(
         {
@@ -92,6 +94,7 @@ export class AdminController {
         },
         this.metadata.build(),
       ),
+      this.timeouts.standard,
     );
     if (!response.product) {
       throw new BadRequestException('Invalid response from product service');
@@ -113,6 +116,7 @@ export class AdminController {
       body.attributes === undefined ? undefined : { values: body.attributes };
     const images: ImagesUpdate | undefined =
       body.images === undefined ? undefined : { urls: body.images };
+    // standard: partial update under one document lock.
     const response = await callGrpc<UpdateProductResponse>(
       this.products.service.updateProduct(
         {
@@ -129,6 +133,7 @@ export class AdminController {
         },
         this.metadata.build(),
       ),
+      this.timeouts.standard,
     );
     if (!response.product) {
       throw new NotFoundException('Product not found');
@@ -142,8 +147,10 @@ export class AdminController {
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiNoContentResponse({ description: 'Product deleted.' })
   async deleteProduct(@Param('id') id: string): Promise<void> {
+    // fast: single-document delete.
     await callGrpc<DeleteProductResponse>(
       this.products.service.deleteProduct({ productId: id }, this.metadata.build()),
+      this.timeouts.fast,
     );
   }
 
@@ -153,11 +160,13 @@ export class AdminController {
   @ApiOkResponse({ type: ProductResponse })
   @ApiNotFoundResponse({ description: 'Product not found', type: HttpErrorResponse })
   async adjustStock(@Param('id') id: string, @Body() body: AdjustStockDto) {
+    // standard: conditional update guarded against negative stock.
     const response = await callGrpc<AdjustStockResponse>(
       this.products.service.adjustStock(
         { productId: id, delta: body.delta },
         this.metadata.build(),
       ),
+      this.timeouts.standard,
     );
     if (!response.product) {
       throw new NotFoundException('Product not found');
@@ -173,6 +182,8 @@ export class AdminController {
   })
   @ApiOkResponse({ type: OrderListResponse })
   async listAllOrders(@Query() query: ListAllOrdersQueryDto) {
+    // long: unbounded cross-tenant scan with optional filters; worst case
+    // walks a growing table.
     const response = await callGrpc<ListAllOrdersResponse>(
       this.orders.service.listAllOrders(
         {
@@ -182,6 +193,7 @@ export class AdminController {
         },
         this.metadata.build(),
       ),
+      this.timeouts.long,
     );
     return {
       orders: (response.orders ?? []).map(toOrderView),
@@ -196,8 +208,10 @@ export class AdminController {
   @ApiOkResponse({ type: OrderResponse })
   @ApiNotFoundResponse({ description: 'Order not found', type: HttpErrorResponse })
   async shipOrder(@Param('id') id: string) {
+    // standard: state-machine transition + outbox write in one tx.
     const response = await callGrpc<ShipOrderResponse>(
       this.orders.service.shipOrder({ orderId: id }, this.metadata.build()),
+      this.timeouts.standard,
     );
     if (!response.order) {
       throw new NotFoundException('Order not found');
@@ -212,8 +226,10 @@ export class AdminController {
   @ApiOkResponse({ type: OrderResponse })
   @ApiNotFoundResponse({ description: 'Order not found', type: HttpErrorResponse })
   async deliverOrder(@Param('id') id: string) {
+    // standard: state-machine transition + outbox write in one tx.
     const response = await callGrpc<DeliverOrderResponse>(
       this.orders.service.deliverOrder({ orderId: id }, this.metadata.build()),
+      this.timeouts.standard,
     );
     if (!response.order) {
       throw new NotFoundException('Order not found');

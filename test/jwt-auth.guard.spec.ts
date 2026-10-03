@@ -117,6 +117,52 @@ describe('JwtAuthGuard', () => {
     const guard = new JwtAuthGuard(makeReflector(false, ['ADMIN']), makeJwt(identity));
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  it('treats an empty roles array as "no role requirement" (same as no decorator)', async () => {
+    const identity: AuthenticatedIdentity = { userId: 'u1', role: 'CUSTOMER' };
+    const { ctx } = makeContext({ authorization: 'Bearer token' });
+    const guard = new JwtAuthGuard(makeReflector(false, []), makeJwt(identity));
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+  });
+
+  it('accepts any role listed in a multi-role requirement', async () => {
+    const identity: AuthenticatedIdentity = { userId: 'u1', role: 'CUSTOMER' };
+    const { ctx } = makeContext({ authorization: 'Bearer token' });
+    const guard = new JwtAuthGuard(
+      makeReflector(false, ['ADMIN', 'CUSTOMER']),
+      makeJwt(identity),
+    );
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+  });
+
+  it('accepts a case-insensitive Bearer scheme', async () => {
+    const identity: AuthenticatedIdentity = { userId: 'u1', role: 'CUSTOMER' };
+    const { ctx, request } = makeContext({ authorization: 'bearer tok' });
+    const guard = new JwtAuthGuard(makeReflector(false, undefined), makeJwt(identity));
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    expect(request.user).toEqual(identity);
+  });
+
+  it('short-circuits on @Public before touching JwtService, even when a role is required', async () => {
+    // @Public() wins over @Roles(): the route is explicitly unauthenticated,
+    // so no verification happens and the role requirement is irrelevant.
+    const jwt = makeJwt(new Error('should not be called'));
+    const { ctx } = makeContext({ authorization: 'Bearer anything' });
+    const guard = new JwtAuthGuard(makeReflector(true, ['ADMIN']), jwt);
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    expect(jwt.verify).not.toHaveBeenCalled();
+  });
+
+  it('does not leak the underlying jose error text in the 401 message', async () => {
+    const { ctx } = makeContext({ authorization: 'Bearer t' });
+    const guard = new JwtAuthGuard(
+      makeReflector(false, undefined),
+      makeJwt(new Error('JWSSignatureVerificationFailed: signature verification failed')),
+    );
+    await expect(guard.canActivate(ctx)).rejects.toMatchObject({
+      message: 'Invalid or expired token',
+    });
+  });
 });
 
 describe('decorators', () => {

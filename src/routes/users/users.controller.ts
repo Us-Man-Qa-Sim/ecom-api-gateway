@@ -32,7 +32,7 @@ import type {
 } from '@us-man-qa-sim/ecom-contracts/generated/user';
 import { GrpcMetadataFactory } from '../../grpc/grpc-metadata.factory';
 import { UserGrpcClient } from '../../grpc/user.client';
-import { callGrpc } from '../../common/grpc-call.util';
+import { callGrpc, GrpcCallTimeouts } from '../../common/grpc-call.util';
 import { toAddressView, toUserView } from '../../common/mappers/user.view';
 import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
 import {
@@ -57,6 +57,7 @@ export class UsersController {
   constructor(
     private readonly users: UserGrpcClient,
     private readonly metadata: GrpcMetadataFactory,
+    private readonly timeouts: GrpcCallTimeouts,
   ) {}
 
   @Get()
@@ -64,8 +65,10 @@ export class UsersController {
   @ApiOkResponse({ type: UserResponse })
   @ApiNotFoundResponse({ description: 'User not found', type: HttpErrorResponse })
   async getMe() {
+    // fast: single indexed read by userId.
     const response = await callGrpc<GetMeResponse>(
       this.users.service.getMe({}, this.metadata.build()),
+      this.timeouts.fast,
     );
     if (!response.user) {
       throw new NotFoundException('User not found');
@@ -77,8 +80,10 @@ export class UsersController {
   @ApiOperation({ summary: 'List all shipping addresses on the current account.' })
   @ApiOkResponse({ type: AddressListResponse })
   async listAddresses() {
+    // fast: bounded by addresses-per-user (small single-digit N in practice).
     const response = await callGrpc<ListAddressesResponse>(
       this.users.service.listAddresses({}, this.metadata.build()),
+      this.timeouts.fast,
     );
     return { addresses: (response.addresses ?? []).map(toAddressView) };
   }
@@ -87,6 +92,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Add a new shipping address.' })
   @ApiCreatedResponse({ type: AddressResponse })
   async createAddress(@Body() body: CreateAddressDto) {
+    // standard: write path (default-address rebalance happens in one tx).
     const response = await callGrpc<CreateAddressResponse>(
       this.users.service.createAddress(
         {
@@ -100,6 +106,7 @@ export class UsersController {
         },
         this.metadata.build(),
       ),
+      this.timeouts.standard,
     );
     if (!response.address) {
       throw new BadRequestException('Invalid response from user service');
@@ -113,8 +120,10 @@ export class UsersController {
   @ApiOkResponse({ type: AddressResponse })
   @ApiNotFoundResponse({ description: 'Address not found', type: HttpErrorResponse })
   async getAddress(@Param('id') id: string) {
+    // fast: indexed single-row lookup with ownership check.
     const response = await callGrpc<GetAddressResponse>(
       this.users.service.getAddress({ addressId: id }, this.metadata.build()),
+      this.timeouts.fast,
     );
     if (!response.address) {
       throw new NotFoundException('Address not found');
@@ -128,6 +137,7 @@ export class UsersController {
   @ApiOkResponse({ type: AddressResponse })
   @ApiNotFoundResponse({ description: 'Address not found', type: HttpErrorResponse })
   async updateAddress(@Param('id') id: string, @Body() body: UpdateAddressDto) {
+    // standard: patch-with-ownership + default-address rebalance.
     const response = await callGrpc<UpdateAddressResponse>(
       this.users.service.updateAddress(
         {
@@ -142,6 +152,7 @@ export class UsersController {
         },
         this.metadata.build(),
       ),
+      this.timeouts.standard,
     );
     if (!response.address) {
       throw new BadRequestException('Invalid response from user service');
@@ -155,7 +166,11 @@ export class UsersController {
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiNoContentResponse({ description: 'Address deleted.' })
   async deleteAddress(@Param('id') id: string): Promise<void> {
+    // fast: single-row delete with ownership check.
     const request: DeleteAddressRequest = { addressId: id };
-    await callGrpc(this.users.service.deleteAddress(request, this.metadata.build()));
+    await callGrpc(
+      this.users.service.deleteAddress(request, this.metadata.build()),
+      this.timeouts.fast,
+    );
   }
 }

@@ -132,6 +132,13 @@ describe('GrpcToHttpExceptionFilter', () => {
     [GrpcStatus.DEADLINE_EXCEEDED, HttpStatus.GATEWAY_TIMEOUT, 'Gateway Timeout'],
     [GrpcStatus.RESOURCE_EXHAUSTED, HttpStatus.TOO_MANY_REQUESTS, 'Too Many Requests'],
     [GrpcStatus.INTERNAL, HttpStatus.INTERNAL_SERVER_ERROR, 'Internal Server Error'],
+    // The less-common codes also need to map explicitly — anything that falls
+    // through to the generic 500 branch below is a hole in the mapping.
+    [GrpcStatus.CANCELLED, HttpStatus.REQUEST_TIMEOUT, 'Request Timeout'],
+    [GrpcStatus.UNKNOWN, HttpStatus.INTERNAL_SERVER_ERROR, 'Internal Server Error'],
+    [GrpcStatus.OUT_OF_RANGE, HttpStatus.BAD_REQUEST, 'Bad Request'],
+    [GrpcStatus.UNIMPLEMENTED, HttpStatus.NOT_IMPLEMENTED, 'Not Implemented'],
+    [GrpcStatus.DATA_LOSS, HttpStatus.INTERNAL_SERVER_ERROR, 'Internal Server Error'],
   ])('maps gRPC status %p to HTTP %p', (grpcCode, httpStatus, label) => {
     const res = makeRes();
     filter.catch({ code: grpcCode, details: 'boom' }, makeHost(res));
@@ -146,6 +153,30 @@ describe('GrpcToHttpExceptionFilter', () => {
     expect(res.body).toMatchObject({ message: 'missing' });
   });
 
+  it('uses the HTTP label as the message when neither details nor message is present', () => {
+    const res = makeRes();
+    filter.catch({ code: GrpcStatus.ALREADY_EXISTS }, makeHost(res));
+    expect(res.body).toMatchObject({ message: 'Conflict' });
+  });
+
+  it('ignores a non-string details value', () => {
+    const res = makeRes();
+    filter.catch(
+      { code: GrpcStatus.NOT_FOUND, details: 123, message: 'the real one' },
+      makeHost(res),
+    );
+    expect(res.body).toMatchObject({ message: 'the real one' });
+  });
+
+  it('ignores an empty-string details value', () => {
+    const res = makeRes();
+    filter.catch(
+      { code: GrpcStatus.NOT_FOUND, details: '', message: 'from message' },
+      makeHost(res),
+    );
+    expect(res.body).toMatchObject({ message: 'from message' });
+  });
+
   it('returns a generic 500 for shapes it does not recognise', () => {
     const res = makeRes();
     filter.catch({ unknown: true }, makeHost(res));
@@ -154,6 +185,47 @@ describe('GrpcToHttpExceptionFilter', () => {
       statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
       error: 'Internal Server Error',
       message: 'Internal server error',
+    });
+  });
+
+  it('returns a generic 500 when the gRPC code is numeric but outside the known range', () => {
+    const res = makeRes();
+    filter.catch({ code: 999, details: 'exotic' }, makeHost(res));
+    expect(res.statusCode).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
+    expect(res.body).toEqual({
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      error: 'Internal Server Error',
+      // 'exotic' is dropped: we don't trust the attacker-reachable details
+      // when the code itself is not a code we handle.
+      message: 'Internal server error',
+    });
+  });
+
+  it('does not leak internals when the exception is a native Error', () => {
+    const res = makeRes();
+    filter.catch(new Error('ECONNREFUSED some-internal-host:5432'), makeHost(res));
+    expect(res.statusCode).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
+    expect(res.body).toMatchObject({ message: 'Internal server error' });
+  });
+
+  it('preserves the body.error and body.statusCode that the ValidationPipe factory supplies', () => {
+    // The ValidationPipe is wired with an exceptionFactory that returns a
+    // structured body including both statusCode and error. The filter must
+    // not clobber those with the generic label derived from the HTTP status.
+    const res = makeRes();
+    const err = new BadRequestException({
+      statusCode: 400,
+      error: 'Bad Request',
+      message: 'email: invalid',
+      errors: [{ field: 'email', errors: ['invalid'] }],
+    });
+    filter.catch(err, makeHost(res));
+    expect(res.statusCode).toBe(HttpStatus.BAD_REQUEST);
+    expect(res.body).toEqual({
+      statusCode: 400,
+      error: 'Bad Request',
+      message: 'email: invalid',
+      errors: [{ field: 'email', errors: ['invalid'] }],
     });
   });
 });

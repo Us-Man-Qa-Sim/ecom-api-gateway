@@ -43,6 +43,17 @@ export const envSchema = z.object({
   PRODUCT_SERVICE_URL: z.string().default('localhost:5002'),
   ORDER_SERVICE_URL: z.string().default('localhost:5003'),
 
+  // GW-10: per-call gRPC deadlines, picked by the call site via a named
+  // profile (fast / standard / long). Values must match
+  // DEFAULT_GRPC_TIMEOUT_MS in common/grpc-call.util.ts; env lets ops relax
+  // them in a slow environment without a code change.
+  //   fast     — single-row reads (getMe, getProduct, …)
+  //   standard — most mutations and single-service list calls (the default)
+  //   long     — cross-service fan-outs (createOrder) and admin scans
+  GRPC_TIMEOUT_FAST_MS: numericString(2_000),
+  GRPC_TIMEOUT_STANDARD_MS: numericString(5_000),
+  GRPC_TIMEOUT_LONG_MS: numericString(10_000),
+
   // JWT verification (GW-3). Public key only — the gateway verifies, it never
   // signs. Issuer/audience must match what user-service embeds in its tokens.
   // Path is optional in `test` (unit tests mock the guard); required otherwise

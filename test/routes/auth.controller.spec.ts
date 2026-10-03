@@ -1,7 +1,14 @@
 import { status as GrpcStatus } from '@grpc/grpc-js';
 import { AuthController } from '../../src/routes/auth/auth.controller';
 import { Role as ProtoRole } from '@us-man-qa-sim/ecom-contracts/generated/user';
-import { errObs, expectMetadata, makeMetadataFactory, makeUserClient, okObs } from './_helpers';
+import {
+  errObs,
+  expectMetadata,
+  makeMetadataFactory,
+  makeTimeouts,
+  makeUserClient,
+  okObs,
+} from './_helpers';
 
 // Unit tests exercise the happy path of each handler. Input validation (the
 // coercion the controller used to do by hand) is enforced by the global
@@ -11,6 +18,7 @@ function controllerWithRegister(registerMock: jest.Mock): AuthController {
   return new AuthController(
     makeUserClient({ register: registerMock }),
     makeMetadataFactory({ requestId: 'req-abc' }),
+    makeTimeouts(),
   );
 }
 
@@ -62,7 +70,11 @@ describe('AuthController', () => {
           accessTokenExpiresAt: { seconds: 1_700_000_900, nanos: 0 },
         },
       });
-      const ctrl = new AuthController(makeUserClient({ login }), makeMetadataFactory());
+      const ctrl = new AuthController(
+        makeUserClient({ login }),
+        makeMetadataFactory(),
+        makeTimeouts(),
+      );
       const result = await ctrl.login({ email: 'a@b.com', password: 'password-ok' });
       expect(result.tokens).toMatchObject({ accessToken: 'at', refreshToken: 'rt' });
       expect(result.user.role).toBe('CUSTOMER');
@@ -70,7 +82,11 @@ describe('AuthController', () => {
 
     it('surfaces downstream UNAUTHENTICATED', async () => {
       const login = errObs(GrpcStatus.UNAUTHENTICATED, 'bad credentials');
-      const ctrl = new AuthController(makeUserClient({ login }), makeMetadataFactory());
+      const ctrl = new AuthController(
+        makeUserClient({ login }),
+        makeMetadataFactory(),
+        makeTimeouts(),
+      );
       await expect(ctrl.login({ email: 'a@b.com', password: 'password-ok' })).rejects.toMatchObject(
         {
           code: GrpcStatus.UNAUTHENTICATED,
@@ -88,7 +104,11 @@ describe('AuthController', () => {
           accessTokenExpiresAt: undefined,
         },
       });
-      const ctrl = new AuthController(makeUserClient({ refreshToken }), makeMetadataFactory());
+      const ctrl = new AuthController(
+        makeUserClient({ refreshToken }),
+        makeMetadataFactory(),
+        makeTimeouts(),
+      );
       const result = await ctrl.refresh({ refreshToken: 'rt' });
       expect(result.tokens.accessToken).toBe('at2');
       expect(result.tokens.accessTokenExpiresAt).toBeNull();
@@ -98,7 +118,11 @@ describe('AuthController', () => {
   describe('logout', () => {
     it('calls logout and returns nothing', async () => {
       const logout = okObs({});
-      const ctrl = new AuthController(makeUserClient({ logout }), makeMetadataFactory());
+      const ctrl = new AuthController(
+        makeUserClient({ logout }),
+        makeMetadataFactory(),
+        makeTimeouts(),
+      );
       await expect(ctrl.logout({ refreshToken: 'rt' })).resolves.toBeUndefined();
       expect(logout).toHaveBeenCalledTimes(1);
     });

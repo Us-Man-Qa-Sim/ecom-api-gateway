@@ -4,7 +4,7 @@ import { OrdersController } from '../../src/routes/orders/orders.controller';
 import { CreateOrderDto } from '../../src/routes/orders/dto/create-order.dto';
 import { CancelOrderDto } from '../../src/routes/orders/dto/cancel-order.dto';
 import { ListMyOrdersQueryDto } from '../../src/routes/orders/dto/list-orders.query';
-import { makeMetadataFactory, makeOrderClient, okObs } from './_helpers';
+import { makeMetadataFactory, makeOrderClient, makeTimeouts, okObs } from './_helpers';
 
 const sampleOrder = {
   id: 'o-1',
@@ -59,7 +59,11 @@ describe('OrdersController', () => {
   describe('create', () => {
     it('maps the request through and returns the order', async () => {
       const createOrder = okObs({ order: sampleOrder });
-      const ctrl = new OrdersController(makeOrderClient({ createOrder }), metadata);
+      const ctrl = new OrdersController(
+        makeOrderClient({ createOrder }),
+        metadata,
+        makeTimeouts(),
+      );
       const result = await ctrl.create(
         createOrderDto({
           addressId: 'a-1',
@@ -77,7 +81,11 @@ describe('OrdersController', () => {
   describe('listMine', () => {
     it('passes status filter through as the enum value', async () => {
       const listMyOrders = okObs({ orders: [sampleOrder], pagination: undefined });
-      const ctrl = new OrdersController(makeOrderClient({ listMyOrders }), metadata);
+      const ctrl = new OrdersController(
+        makeOrderClient({ listMyOrders }),
+        metadata,
+        makeTimeouts(),
+      );
       await ctrl.listMine(listMyOrdersQueryDto({ status: 'CONFIRMED' }));
       expect(listMyOrders.mock.calls[0][0]).toMatchObject({
         status: ProtoOrderStatus.ORDER_STATUS_CONFIRMED,
@@ -86,7 +94,11 @@ describe('OrdersController', () => {
 
     it('omits status when unset', async () => {
       const listMyOrders = okObs({ orders: [], pagination: undefined });
-      const ctrl = new OrdersController(makeOrderClient({ listMyOrders }), metadata);
+      const ctrl = new OrdersController(
+        makeOrderClient({ listMyOrders }),
+        metadata,
+        makeTimeouts(),
+      );
       await ctrl.listMine(listMyOrdersQueryDto());
       expect(listMyOrders.mock.calls[0][0]).toMatchObject({ status: undefined });
     });
@@ -95,7 +107,11 @@ describe('OrdersController', () => {
   describe('get', () => {
     it('404s on missing order', async () => {
       const getOrder = okObs({ order: undefined });
-      const ctrl = new OrdersController(makeOrderClient({ getOrder }), metadata);
+      const ctrl = new OrdersController(
+        makeOrderClient({ getOrder }),
+        metadata,
+        makeTimeouts(),
+      );
       await expect(ctrl.get('o-1')).rejects.toBeInstanceOf(NotFoundException);
     });
   });
@@ -103,14 +119,22 @@ describe('OrdersController', () => {
   describe('cancel', () => {
     it('forwards an optional reason', async () => {
       const cancelOrder = okObs({ order: sampleOrder });
-      const ctrl = new OrdersController(makeOrderClient({ cancelOrder }), metadata);
+      const ctrl = new OrdersController(
+        makeOrderClient({ cancelOrder }),
+        metadata,
+        makeTimeouts(),
+      );
       await ctrl.cancel('o-1', cancelOrderDto('changed mind'));
       expect(cancelOrder.mock.calls[0][0]).toEqual({ orderId: 'o-1', reason: 'changed mind' });
     });
 
     it('tolerates a missing reason', async () => {
       const cancelOrder = okObs({ order: sampleOrder });
-      const ctrl = new OrdersController(makeOrderClient({ cancelOrder }), metadata);
+      const ctrl = new OrdersController(
+        makeOrderClient({ cancelOrder }),
+        metadata,
+        makeTimeouts(),
+      );
       await ctrl.cancel('o-1', cancelOrderDto());
       expect(cancelOrder.mock.calls[0][0]).toEqual({ orderId: 'o-1', reason: undefined });
     });

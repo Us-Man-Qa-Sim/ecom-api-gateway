@@ -7,7 +7,13 @@ import {
 } from '../../src/routes/admin/dto/product-admin.dto';
 import { ListAllOrdersQueryDto } from '../../src/routes/orders/dto/list-orders.query';
 import { MoneyDto } from '../../src/common/dto/money.dto';
-import { makeMetadataFactory, makeOrderClient, makeProductClient, okObs } from './_helpers';
+import {
+  makeMetadataFactory,
+  makeOrderClient,
+  makeProductClient,
+  makeTimeouts,
+  okObs,
+} from './_helpers';
 
 const metadata = makeMetadataFactory({ userId: 'admin-1', role: 'ADMIN' });
 
@@ -85,6 +91,7 @@ describe('AdminController', () => {
         makeProductClient({ createProduct }),
         makeOrderClient({}),
         metadata,
+        makeTimeouts(),
       );
       await ctrl.createProduct(
         createProductDto({
@@ -114,6 +121,7 @@ describe('AdminController', () => {
         makeProductClient({ createProduct }),
         makeOrderClient({}),
         metadata,
+        makeTimeouts(),
       );
       await ctrl.createProduct(
         createProductDto({
@@ -135,6 +143,7 @@ describe('AdminController', () => {
         makeProductClient({ updateProduct }),
         makeOrderClient({}),
         metadata,
+        makeTimeouts(),
       );
       await ctrl.updateProduct(
         'p-1',
@@ -158,6 +167,7 @@ describe('AdminController', () => {
         makeProductClient({ updateProduct }),
         makeOrderClient({}),
         metadata,
+        makeTimeouts(),
       );
       await ctrl.updateProduct('p-1', updateProductDto({ name: 'New' }));
       const req = updateProduct.mock.calls[0][0];
@@ -173,6 +183,7 @@ describe('AdminController', () => {
         makeProductClient({ adjustStock }),
         makeOrderClient({}),
         metadata,
+        makeTimeouts(),
       );
       await ctrl.adjustStock('p-1', adjustStockDto(-3));
       expect(adjustStock.mock.calls[0][0]).toEqual({ productId: 'p-1', delta: -3 });
@@ -189,6 +200,7 @@ describe('AdminController', () => {
         makeProductClient({}),
         makeOrderClient({ listAllOrders }),
         metadata,
+        makeTimeouts(),
       );
       await ctrl.listAllOrders(
         listAllOrdersQueryDto({
@@ -213,6 +225,7 @@ describe('AdminController', () => {
         makeProductClient({}),
         makeOrderClient({ shipOrder }),
         metadata,
+        makeTimeouts(),
       );
       const result = await ctrl.shipOrder('o-1');
       expect(result.status).toBe('CONFIRMED');
@@ -225,6 +238,7 @@ describe('AdminController', () => {
         makeProductClient({}),
         makeOrderClient({ deliverOrder }),
         metadata,
+        makeTimeouts(),
       );
       await ctrl.deliverOrder('o-1');
       expect(deliverOrder.mock.calls[0][0]).toEqual({ orderId: 'o-1' });

@@ -21,7 +21,7 @@ import type {
 import { Public } from '../../auth/decorators/public.decorator';
 import { ProductGrpcClient } from '../../grpc/product.client';
 import { GrpcMetadataFactory } from '../../grpc/grpc-metadata.factory';
-import { callGrpc } from '../../common/grpc-call.util';
+import { callGrpc, GrpcCallTimeouts } from '../../common/grpc-call.util';
 import { toPaginationView, toProductView } from '../../common/mappers/product.view';
 import { ListProductsQueryDto } from './dto/list-products.query';
 import {
@@ -40,6 +40,7 @@ export class ProductsController {
   constructor(
     private readonly products: ProductGrpcClient,
     private readonly metadata: GrpcMetadataFactory,
+    private readonly timeouts: GrpcCallTimeouts,
   ) {}
 
   @Get()
@@ -59,6 +60,8 @@ export class ProductsController {
     ) {
       throw new BadRequestException('minPriceMinor must be <= maxPriceMinor');
     }
+    // long: text search over Mongo with pagination; worst case can scan
+    // enough documents that the standard profile is too tight.
     const response = await callGrpc<ListProductsResponse>(
       this.products.service.listProducts(
         {
@@ -71,6 +74,7 @@ export class ProductsController {
         },
         this.metadata.buildAnonymous(),
       ),
+      this.timeouts.long,
     );
     return {
       products: (response.products ?? []).map(toProductView),
@@ -84,8 +88,10 @@ export class ProductsController {
   @ApiOkResponse({ type: ProductResponse })
   @ApiNotFoundResponse({ description: 'Product not found', type: HttpErrorResponse })
   async get(@Param('id') id: string) {
+    // fast: indexed single-document lookup.
     const response = await callGrpc<GetProductResponse>(
       this.products.service.getProduct({ productId: id }, this.metadata.buildAnonymous()),
+      this.timeouts.fast,
     );
     if (!response.product) {
       throw new NotFoundException('Product not found');

@@ -28,7 +28,7 @@ import type {
 } from '@us-man-qa-sim/ecom-contracts/generated/order';
 import { OrderGrpcClient } from '../../grpc/order.client';
 import { GrpcMetadataFactory } from '../../grpc/grpc-metadata.factory';
-import { callGrpc } from '../../common/grpc-call.util';
+import { callGrpc, GrpcCallTimeouts } from '../../common/grpc-call.util';
 import { toOrderView } from '../../common/mappers/order.view';
 import { toPaginationView } from '../../common/mappers/product.view';
 import { stringToProtoOrderStatus } from '../../common/mappers/proto.mapper';
@@ -50,12 +50,16 @@ export class OrdersController {
   constructor(
     private readonly orders: OrderGrpcClient,
     private readonly metadata: GrpcMetadataFactory,
+    private readonly timeouts: GrpcCallTimeouts,
   ) {}
 
   @Post()
   @ApiOperation({ summary: 'Place a new order. Starts PENDING until stock reservation resolves.' })
   @ApiCreatedResponse({ type: OrderResponse })
   async create(@Body() body: CreateOrderDto) {
+    // long: createOrder fans out to product (GetProductsByIds) and user
+    // (GetAddress) before writing the Order + outbox in one tx. Three
+    // deadlines compose, so give the gateway side some headroom.
     const response = await callGrpc<CreateOrderResponse>(
       this.orders.service.createOrder(
         {
@@ -67,6 +71,7 @@ export class OrdersController {
         },
         this.metadata.build(),
       ),
+      this.timeouts.long,
     );
     if (!response.order) {
       throw new BadRequestException('Invalid response from order service');
@@ -78,6 +83,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'List orders owned by the authenticated user.' })
   @ApiOkResponse({ type: OrderListResponse })
   async listMine(@Query() query: ListMyOrdersQueryDto) {
+    // standard: paginated query bounded by one user's order history.
     const response = await callGrpc<ListMyOrdersResponse>(
       this.orders.service.listMyOrders(
         {
@@ -86,6 +92,7 @@ export class OrdersController {
         },
         this.metadata.build(),
       ),
+      this.timeouts.standard,
     );
     return {
       orders: (response.orders ?? []).map(toOrderView),
@@ -102,8 +109,10 @@ export class OrdersController {
     type: HttpErrorResponse,
   })
   async get(@Param('id') id: string) {
+    // fast: indexed single-row read with ownership check.
     const response = await callGrpc<GetOrderResponse>(
       this.orders.service.getOrder({ orderId: id }, this.metadata.build()),
+      this.timeouts.fast,
     );
     if (!response.order) {
       throw new NotFoundException('Order not found');
@@ -121,8 +130,10 @@ export class OrdersController {
     type: HttpErrorResponse,
   })
   async cancel(@Param('id') id: string, @Body() body: CancelOrderDto) {
+    // standard: state-machine transition + outbox write in one tx.
     const response = await callGrpc<CancelOrderResponse>(
       this.orders.service.cancelOrder({ orderId: id, reason: body.reason }, this.metadata.build()),
+      this.timeouts.standard,
     );
     if (!response.order) {
       throw new BadRequestException('Invalid response from order service');

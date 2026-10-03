@@ -7,6 +7,7 @@ import { UserGrpcClient } from '../../src/grpc/user.client';
 import { ProductGrpcClient } from '../../src/grpc/product.client';
 import { OrderGrpcClient } from '../../src/grpc/order.client';
 import { GrpcMetadataFactory } from '../../src/grpc/grpc-metadata.factory';
+import { GrpcCallTimeouts } from '../../src/common/grpc-call.util';
 import type { RequestContextService } from '../../src/context/request-context.service';
 
 // Build a GrpcMetadataFactory that always returns a canned context so each
@@ -67,6 +68,13 @@ function baseServiceStub<K extends string>(
         throwError(() => new Error(`Unexpected call to ${String(prop)}`));
     },
   });
+}
+
+// GrpcCallTimeouts resolved without a ConfigService falls back to the baked-in
+// DEFAULT_GRPC_TIMEOUT_MS; that's what unit tests want so the generous
+// defaults don't fire inside a sub-second test run.
+export function makeTimeouts(): GrpcCallTimeouts {
+  return new GrpcCallTimeouts();
 }
 
 export function okObs<T>(value: T) {

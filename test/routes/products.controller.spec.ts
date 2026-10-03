@@ -1,7 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ProductsController } from '../../src/routes/products/products.controller';
 import { ListProductsQueryDto } from '../../src/routes/products/dto/list-products.query';
-import { makeMetadataFactory, makeProductClient, okObs } from './_helpers';
+import { makeMetadataFactory, makeProductClient, makeTimeouts, okObs } from './_helpers';
 
 const sampleProduct = {
   id: 'p-1',
@@ -31,7 +31,11 @@ describe('ProductsController', () => {
       products: [sampleProduct],
       pagination: { total: 1, page: 1, pageSize: 20, totalPages: 1 },
     });
-    const ctrl = new ProductsController(makeProductClient({ listProducts }), makeMetadataFactory());
+    const ctrl = new ProductsController(
+      makeProductClient({ listProducts }),
+      makeMetadataFactory(),
+      makeTimeouts(),
+    );
     const result = await ctrl.list(makeQuery());
     expect(listProducts.mock.calls[0][0]).toMatchObject({ pagination: { page: 1, pageSize: 20 } });
     expect(result.products[0]).toMatchObject({
@@ -43,7 +47,11 @@ describe('ProductsController', () => {
 
   it('passes filters through to the gRPC request', async () => {
     const listProducts = okObs({ products: [], pagination: undefined });
-    const ctrl = new ProductsController(makeProductClient({ listProducts }), makeMetadataFactory());
+    const ctrl = new ProductsController(
+      makeProductClient({ listProducts }),
+      makeMetadataFactory(),
+      makeTimeouts(),
+    );
     await ctrl.list(
       makeQuery({
         page: 2,
@@ -69,6 +77,7 @@ describe('ProductsController', () => {
     const ctrl = new ProductsController(
       makeProductClient({ listProducts: jest.fn() }),
       makeMetadataFactory(),
+      makeTimeouts(),
     );
     await expect(
       ctrl.list(makeQuery({ minPriceMinor: 500, maxPriceMinor: 100 })),
@@ -77,7 +86,11 @@ describe('ProductsController', () => {
 
   it('gets a product by id', async () => {
     const getProduct = okObs({ product: sampleProduct });
-    const ctrl = new ProductsController(makeProductClient({ getProduct }), makeMetadataFactory());
+    const ctrl = new ProductsController(
+      makeProductClient({ getProduct }),
+      makeMetadataFactory(),
+      makeTimeouts(),
+    );
     const result = await ctrl.get('p-1');
     expect(getProduct.mock.calls[0][0]).toEqual({ productId: 'p-1' });
     expect(result.id).toBe('p-1');
@@ -85,7 +98,11 @@ describe('ProductsController', () => {
 
   it('404s on missing product', async () => {
     const getProduct = okObs({ product: undefined });
-    const ctrl = new ProductsController(makeProductClient({ getProduct }), makeMetadataFactory());
+    const ctrl = new ProductsController(
+      makeProductClient({ getProduct }),
+      makeMetadataFactory(),
+      makeTimeouts(),
+    );
     await expect(ctrl.get('p-1')).rejects.toBeInstanceOf(NotFoundException);
   });
 });

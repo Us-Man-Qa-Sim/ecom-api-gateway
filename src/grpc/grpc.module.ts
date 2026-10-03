@@ -6,6 +6,7 @@ import { ECOM_USER_V1_PACKAGE_NAME } from '@us-man-qa-sim/ecom-contracts/generat
 import { ECOM_PRODUCT_V1_PACKAGE_NAME } from '@us-man-qa-sim/ecom-contracts/generated/product';
 import { ECOM_ORDER_V1_PACKAGE_NAME } from '@us-man-qa-sim/ecom-contracts/generated/order';
 import { RequestContextModule } from '../context/request-context.module';
+import { GrpcCallTimeouts } from '../common/grpc-call.util';
 import { ORDER_GRPC_PACKAGE, PRODUCT_GRPC_PACKAGE, USER_GRPC_PACKAGE } from './grpc-tokens';
 import { UserGrpcClient } from './user.client';
 import { ProductGrpcClient } from './product.client';
@@ -74,6 +75,7 @@ import { GrpcMetadataFactory } from './grpc-metadata.factory';
     OrderGrpcClient,
     GrpcHealthIndicator,
     GrpcMetadataFactory,
+    GrpcCallTimeouts,
   ],
   exports: [
     UserGrpcClient,
@@ -81,6 +83,7 @@ import { GrpcMetadataFactory } from './grpc-metadata.factory';
     OrderGrpcClient,
     GrpcHealthIndicator,
     GrpcMetadataFactory,
+    GrpcCallTimeouts,
   ],
 })
 export class GrpcModule {}

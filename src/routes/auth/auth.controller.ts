@@ -18,7 +18,7 @@ import type {
 import { Public } from '../../auth/decorators/public.decorator';
 import { GrpcMetadataFactory } from '../../grpc/grpc-metadata.factory';
 import { UserGrpcClient } from '../../grpc/user.client';
-import { callGrpc } from '../../common/grpc-call.util';
+import { callGrpc, GrpcCallTimeouts } from '../../common/grpc-call.util';
 import { toAuthTokensView, toUserView } from '../../common/mappers/user.view';
 import { AuthThrottle } from '../../common/throttler/auth-throttle';
 import { LoginDto, LogoutDto, RefreshTokenDto, RegisterDto } from './dto/auth.dto';
@@ -47,14 +47,18 @@ export class AuthController {
   constructor(
     private readonly users: UserGrpcClient,
     private readonly metadata: GrpcMetadataFactory,
+    private readonly timeouts: GrpcCallTimeouts,
   ) {}
 
   @Post('register')
   @ApiOperation({ summary: 'Register a new customer account.' })
   @ApiCreatedResponse({ type: RegisterResponse })
   async register(@Body() body: RegisterDto) {
+    // standard: argon2 hashing + Postgres insert + outbox write, well under
+    // the default 5s even on a cold worker.
     const response = await callGrpc<RegisterRpcResponse>(
       this.users.service.register(body, this.metadata.buildAnonymous()),
+      this.timeouts.standard,
     );
     if (!response.user) {
       // Should never happen — user-service always returns the row on success.
@@ -74,8 +78,10 @@ export class AuthController {
   @ApiOkResponse({ type: LoginResponse })
   @ApiUnauthorizedResponse({ description: 'Invalid credentials', type: HttpErrorResponse })
   async login(@Body() body: LoginDto) {
+    // standard: argon2 verify (deliberately slow) + token issuance.
     const response = await callGrpc<LoginRpcResponse>(
       this.users.service.login(body, this.metadata.buildAnonymous()),
+      this.timeouts.standard,
     );
     if (!response.user || !response.tokens) {
       throw new BadRequestException('Invalid response from user service');
@@ -95,8 +101,10 @@ export class AuthController {
     type: HttpErrorResponse,
   })
   async refresh(@Body() body: RefreshTokenDto) {
+    // fast: refresh is one indexed lookup + rotation write; no hashing.
     const response = await callGrpc<RefreshTokenRpcResponse>(
       this.users.service.refreshToken(body, this.metadata.buildAnonymous()),
+      this.timeouts.fast,
     );
     if (!response.tokens) {
       throw new BadRequestException('Invalid response from user service');
@@ -112,8 +120,10 @@ export class AuthController {
     // Logout takes the refresh token as its credential (see D4: refresh is
     // rotating and family-revoked on reuse). Access token is not required —
     // a logged-out user may already be unable to call authenticated routes.
+    // fast: single-row revoke, idempotent.
     await callGrpc<LogoutRpcResponse>(
       this.users.service.logout(body, this.metadata.buildAnonymous()),
+      this.timeouts.fast,
     );
   }
 }

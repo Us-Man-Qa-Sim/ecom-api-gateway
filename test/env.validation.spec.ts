@@ -22,6 +22,28 @@ describe('env validation', () => {
     expect(env.BODY_LIMIT_URLENCODED).toBe('100kb');
     expect(env.SWAGGER_ENABLED).toBe(true);
     expect(env.SWAGGER_PATH).toBe('docs');
+    // GW-10: timeout defaults match DEFAULT_GRPC_TIMEOUT_MS in grpc-call.util.ts.
+    expect(env.GRPC_TIMEOUT_FAST_MS).toBe(2_000);
+    expect(env.GRPC_TIMEOUT_STANDARD_MS).toBe(5_000);
+    expect(env.GRPC_TIMEOUT_LONG_MS).toBe(10_000);
+  });
+
+  it('coerces GRPC_TIMEOUT_* overrides to numbers', () => {
+    const env = validateEnv({
+      NODE_ENV: 'test',
+      GRPC_TIMEOUT_FAST_MS: '1500',
+      GRPC_TIMEOUT_STANDARD_MS: '4000',
+      GRPC_TIMEOUT_LONG_MS: '20000',
+    });
+    expect(env.GRPC_TIMEOUT_FAST_MS).toBe(1_500);
+    expect(env.GRPC_TIMEOUT_STANDARD_MS).toBe(4_000);
+    expect(env.GRPC_TIMEOUT_LONG_MS).toBe(20_000);
+  });
+
+  it('rejects a non-numeric GRPC_TIMEOUT_STANDARD_MS', () => {
+    expect(() =>
+      validateEnv({ NODE_ENV: 'test', GRPC_TIMEOUT_STANDARD_MS: 'later' }),
+    ).toThrow(/GRPC_TIMEOUT_STANDARD_MS/);
   });
 
   it('parses SWAGGER_ENABLED case-insensitively (anything but "true" → false)', () => {
