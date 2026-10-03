@@ -4,7 +4,7 @@ Public HTTP gateway for the ecom platform. Sits behind NGINX (Phase 9), verifies
 
 ## Status
 
-`GW-1` – `GW-5` complete:
+`GW-1` – `GW-9` partially complete:
 
 - NestJS 12 HTTP app on `:3000` with pino logging, config validation (zod), multi-stage Dockerfile, Jest.
 - gRPC clients for `user`, `product` and `order` wired via `ClientsModule.registerAsync`, typed by `@us-man-qa-sim/ecom-contracts` (`UserServiceClient`, `ProductServiceClient`, `OrderServiceClient`), exposed as injectable wrappers (`UserGrpcClient`, `ProductGrpcClient`, `OrderGrpcClient`).
@@ -12,8 +12,9 @@ Public HTTP gateway for the ecom platform. Sits behind NGINX (Phase 9), verifies
 - RS256 JWT verification via `jose`. Global `JwtAuthGuard` (registered via `APP_GUARD`) authenticates every route by default; opt out with `@Public()` and restrict by role with `@Roles('ADMIN', …)`. Verified identity attaches to `req.user` and is available in controllers via `@CurrentUser()`.
 - Request context: `RequestContextMiddleware` canonicalises `x-request-id` (or mints one) into AsyncLocalStorage, and `GrpcMetadataFactory` emits `x-user-id`, `x-user-role` and `x-request-id` on every downstream call.
 - REST routes mounted for `/auth/*`, `/users/me(/addresses)`, `/products`, `/orders`, `/admin/*` — each controller forwards to the gRPC client via a shared `callGrpc` helper (rxjs `firstValueFrom` + 5s timeout). A global `GrpcToHttpExceptionFilter` maps gRPC status codes to HTTP responses.
+- OpenAPI/Swagger (`GW-9`): spec served at `/docs-json`, UI at `/docs`. Toggleable with `SWAGGER_ENABLED` and `SWAGGER_PATH`. Every DTO is annotated with `@ApiProperty`; every controller is tagged and has operation summaries and typed response schemas; the UI exposes the bearer scheme so tokens from `/auth/login` can be pasted straight in.
 
-Follow-ups (`GW-6` → `GW-11`) refine DTO validation (class-validator), CORS/Helmet, throttler, Swagger, per-call gRPC deadlines, and extra tests.
+Follow-ups (`GW-6` → `GW-11`) refine DTO validation (class-validator), CORS/Helmet, throttler, per-call gRPC deadlines, and extra tests.
 
 ## Responsibilities (target — see BACKEND_PLAN.md §Phase 4)
 
@@ -65,19 +66,21 @@ The gateway `depends_on` all three backend services in `infra/docker-compose.yml
 
 See `.env.example`. All variables are validated at boot with zod; unknown or malformed values crash the process before Nest starts.
 
-| Variable                      | Default          | Notes                                                         |
-| ----------------------------- | ---------------- | ------------------------------------------------------------- |
-| `NODE_ENV`                    | `development`    | `development` \| `test` \| `production`                       |
-| `LOG_LEVEL`                   | `info`           | pino level                                                    |
-| `HTTP_HOST`                   | `0.0.0.0`        |                                                               |
-| `HTTP_PORT`                   | `3000`           | Public port                                                   |
-| `USER_SERVICE_URL`            | `localhost:5001` | gRPC target for `ecom.user.v1.UserService`                    |
-| `PRODUCT_SERVICE_URL`         | `localhost:5002` | gRPC target for `ecom.product.v1.ProductService`              |
-| `ORDER_SERVICE_URL`           | `localhost:5003` | gRPC target for `ecom.order.v1.OrderService`                  |
-| `JWT_PUBLIC_KEY_PATH`         | _(none)_         | RSA public PEM matching user-service. Required except in test |
-| `JWT_ISSUER`                  | `user-service`   | Must match user-service `JWT_ISSUER`                          |
-| `JWT_AUDIENCE`                | `ecom-api`       | Must match user-service `JWT_AUDIENCE`                        |
-| `JWT_CLOCK_TOLERANCE_SECONDS` | `5`              | Skew allowance between the two hosts                          |
+| Variable                      | Default          | Notes                                                            |
+| ----------------------------- | ---------------- | ---------------------------------------------------------------- |
+| `NODE_ENV`                    | `development`    | `development` \| `test` \| `production`                          |
+| `LOG_LEVEL`                   | `info`           | pino level                                                       |
+| `HTTP_HOST`                   | `0.0.0.0`        |                                                                  |
+| `HTTP_PORT`                   | `3000`           | Public port                                                      |
+| `USER_SERVICE_URL`            | `localhost:5001` | gRPC target for `ecom.user.v1.UserService`                       |
+| `PRODUCT_SERVICE_URL`         | `localhost:5002` | gRPC target for `ecom.product.v1.ProductService`                 |
+| `ORDER_SERVICE_URL`           | `localhost:5003` | gRPC target for `ecom.order.v1.OrderService`                     |
+| `JWT_PUBLIC_KEY_PATH`         | _(none)_         | RSA public PEM matching user-service. Required except in test    |
+| `JWT_ISSUER`                  | `user-service`   | Must match user-service `JWT_ISSUER`                             |
+| `JWT_AUDIENCE`                | `ecom-api`       | Must match user-service `JWT_AUDIENCE`                           |
+| `JWT_CLOCK_TOLERANCE_SECONDS` | `5`              | Skew allowance between the two hosts                             |
+| `SWAGGER_ENABLED`             | `true`           | Mount the Swagger UI + JSON spec. `false` disables both          |
+| `SWAGGER_PATH`                | `docs`           | UI mounts at `/${SWAGGER_PATH}`, JSON at `/${SWAGGER_PATH}-json` |
 
 ## Auth model (GW-3)
 
@@ -174,3 +177,12 @@ A global `GrpcToHttpExceptionFilter` maps downstream gRPC errors into HTTP respo
 - `GET /health/live` — pure liveness (`{status:"ok"}`), no dependencies.
 
 The Docker `HEALTHCHECK` polls `/health` every 15 s.
+
+## OpenAPI / Swagger (GW-9)
+
+- `GET /docs` — Swagger UI. The sidebar is grouped by route tag (`auth`, `users`, `products`, `orders`, `admin`, `health`) and matches the layout under `src/routes/*`.
+- `GET /docs-json` — raw OpenAPI 3 document. Point the Next.js client generator at this URL.
+
+The spec declares a `bearer` HTTP security scheme (JWT). The UI's **Authorize** button accepts the access token returned by `POST /auth/login`; thanks to `persistAuthorization`, that token survives a page reload while you explore the surface.
+
+Both the UI and the JSON spec can be turned off with `SWAGGER_ENABLED=false` — useful if you want the gateway's public surface to stop advertising its routes. `SWAGGER_PATH` changes the mount path (set to `openapi` to serve `/openapi` + `/openapi-json`).

@@ -7,6 +7,7 @@ import { Logger as PinoLogger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { buildValidationPipe } from './common/validation/validation-pipe.factory';
 import { applySecurityMiddleware } from './common/security/security.middleware';
+import { setupSwagger } from './swagger/swagger.setup';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -25,6 +26,11 @@ async function bootstrap(): Promise<void> {
   // place so e2e tests can bootstrap a Nest app with the same pipe behaviour.
   app.useGlobalPipes(buildValidationPipe());
 
+  // GW-9: OpenAPI/Swagger UI. Mounted before listen() so the UI is ready as
+  // soon as the port opens. The setup helper itself is a no-op when disabled
+  // by env, so there's no cost to leaving the call unconditional.
+  const swaggerMounted = setupSwagger(app, config);
+
   const httpHost = process.env.HTTP_HOST ?? '0.0.0.0';
   const httpPort = Number(process.env.HTTP_PORT ?? 3000);
 
@@ -34,6 +40,10 @@ async function bootstrap(): Promise<void> {
 
   const logger = new NestLogger('bootstrap');
   logger.log(`HTTP listening on ${httpHost}:${httpPort}`);
+  if (swaggerMounted) {
+    const path = String(config.get('SWAGGER_PATH')).replace(/^\/+/, '');
+    logger.log(`Swagger UI mounted at /${path}`);
+  }
 }
 
 bootstrap().catch((err) => {

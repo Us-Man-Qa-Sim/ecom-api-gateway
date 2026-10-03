@@ -8,10 +8,7 @@ import helmet from 'helmet';
 // first process to touch user input and the one that applies these controls
 // in dev. Keeping the wiring in one function lets `main.ts` call it and e2e
 // tests reuse it on a Nest test app.
-export function applySecurityMiddleware(
-  app: NestExpressApplication,
-  config: ConfigService,
-): void {
+export function applySecurityMiddleware(app: NestExpressApplication, config: ConfigService): void {
   const corsOrigins = config.getOrThrow<string[]>('CORS_ORIGINS');
   const corsCredentials = config.getOrThrow<boolean>('CORS_CREDENTIALS');
   const jsonLimit = config.getOrThrow<string>('BODY_LIMIT_JSON');

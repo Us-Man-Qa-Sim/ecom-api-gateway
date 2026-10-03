@@ -80,6 +80,18 @@ export const envSchema = z.object({
   // module-level constants since class decorators cannot read ConfigService.
   THROTTLE_TTL_MS: numericString(60_000),
   THROTTLE_LIMIT: numericString(60),
+
+  // OpenAPI / Swagger UI (GW-9). The Next.js client is generated from the
+  // emitted spec, so dev defaults to serving the UI at /docs. In production
+  // the public gateway can either leave it on (useful for API consumers) or
+  // set SWAGGER_ENABLED=false so NGINX doesn't need an allow-list rule.
+  SWAGGER_ENABLED: z
+    .string()
+    .default('true')
+    .transform((value) => value.toLowerCase() === 'true'),
+  // Path (relative to the HTTP root) where the UI is served. The raw JSON
+  // spec is served at `${SWAGGER_PATH}-json` by @nestjs/swagger.
+  SWAGGER_PATH: z.string().default('docs'),
 });
 
 export type Env = z.infer<typeof envSchema>;

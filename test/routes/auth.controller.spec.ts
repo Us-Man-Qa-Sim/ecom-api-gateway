@@ -71,11 +71,11 @@ describe('AuthController', () => {
     it('surfaces downstream UNAUTHENTICATED', async () => {
       const login = errObs(GrpcStatus.UNAUTHENTICATED, 'bad credentials');
       const ctrl = new AuthController(makeUserClient({ login }), makeMetadataFactory());
-      await expect(
-        ctrl.login({ email: 'a@b.com', password: 'password-ok' }),
-      ).rejects.toMatchObject({
-        code: GrpcStatus.UNAUTHENTICATED,
-      });
+      await expect(ctrl.login({ email: 'a@b.com', password: 'password-ok' })).rejects.toMatchObject(
+        {
+          code: GrpcStatus.UNAUTHENTICATED,
+        },
+      );
     });
   });
 

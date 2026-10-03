@@ -1,4 +1,10 @@
 import { Controller, Get } from '@nestjs/common';
+import {
+  ApiOkResponse,
+  ApiOperation,
+  ApiServiceUnavailableResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { HealthCheck, HealthCheckService, MemoryHealthIndicator } from '@nestjs/terminus';
 import { Public } from '../auth/decorators/public.decorator';
 import { GrpcHealthIndicator } from '../grpc/grpc-health.indicator';
@@ -8,6 +14,7 @@ import { GrpcHealthIndicator } from '../grpc/grpc-health.indicator';
 // service unreachable). /health/live is pure liveness — the process is
 // running — and is used by container orchestrators that need to distinguish
 // "restart me" (liveness) from "stop routing to me" (readiness).
+@ApiTags('health')
 @Controller('health')
 @Public()
 export class HealthController {
@@ -19,6 +26,11 @@ export class HealthController {
 
   @Get()
   @HealthCheck()
+  @ApiOperation({
+    summary: 'Readiness probe — memory + gRPC reachability to every downstream service.',
+  })
+  @ApiOkResponse({ description: 'All checks passed.' })
+  @ApiServiceUnavailableResponse({ description: 'At least one check failed.' })
   check() {
     return this.health.check([
       () => this.memory.checkHeap('memory_heap', 512 * 1024 * 1024),
@@ -30,6 +42,8 @@ export class HealthController {
   }
 
   @Get('live')
+  @ApiOperation({ summary: 'Liveness probe — process is running (no dependency checks).' })
+  @ApiOkResponse({ schema: { example: { status: 'ok' } } })
   live() {
     return { status: 'ok' as const };
   }

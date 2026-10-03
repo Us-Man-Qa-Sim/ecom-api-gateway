@@ -132,7 +132,8 @@ function normaliseHttpBody(body: string | object, status: HttpStatus): ErrorBody
     return { statusCode: status, error: label, message: body };
   }
   const obj = body as Record<string, unknown>;
-  const message = typeof obj.message === 'string' ? obj.message : readMessageArray(obj.message, label);
+  const message =
+    typeof obj.message === 'string' ? obj.message : readMessageArray(obj.message, label);
   const errors = obj.errors;
   const error = typeof obj.error === 'string' ? obj.error : label;
   return {

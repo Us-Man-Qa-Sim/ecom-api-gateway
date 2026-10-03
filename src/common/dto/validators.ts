@@ -19,7 +19,9 @@ export function IsStringRecord(options?: ValidationOptions): PropertyDecorator {
         validate(value: unknown) {
           if (value === undefined || value === null) return true;
           if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-          return Object.values(value as Record<string, unknown>).every((v) => typeof v === 'string');
+          return Object.values(value as Record<string, unknown>).every(
+            (v) => typeof v === 'string',
+          );
         },
         defaultMessage(args: ValidationArguments) {
           return `${args.property} must be an object with string values`;

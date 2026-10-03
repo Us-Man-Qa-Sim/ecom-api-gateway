@@ -74,23 +74,17 @@ describe('ThrottlerGuard (GW-8)', () => {
       for (let i = 0; i < BASELINE_LIMIT; i += 1) {
         // Each request from a distinct forwarded IP so earlier tests do not
         // bleed into this one via a shared bucket.
-        const res = await request(server)
-          .get('/public')
-          .set('X-Forwarded-For', '10.0.0.1');
+        const res = await request(server).get('/public').set('X-Forwarded-For', '10.0.0.1');
         expect(res.status).toBe(200);
       }
 
-      const blocked = await request(server)
-        .get('/public')
-        .set('X-Forwarded-For', '10.0.0.1');
+      const blocked = await request(server).get('/public').set('X-Forwarded-For', '10.0.0.1');
       expect(blocked.status).toBe(429);
     });
 
     it('keys per-IP, so a different client has its own budget', async () => {
       const server = app.getHttpServer();
-      const res = await request(server)
-        .get('/public')
-        .set('X-Forwarded-For', '10.0.0.2');
+      const res = await request(server).get('/public').set('X-Forwarded-For', '10.0.0.2');
       // 10.0.0.2 is fresh; a single call must pass even though 10.0.0.1 is
       // exhausted from the previous test.
       expect(res.status).toBe(200);
@@ -118,9 +112,7 @@ describe('ThrottlerGuard (GW-8)', () => {
       // override must let it through because AUTH_THROTTLE_LIMIT (10) >
       // BASELINE_LIMIT (3).
       for (let i = 0; i < BASELINE_LIMIT + 1; i += 1) {
-        const res = await request(server)
-          .get('/auth-sensitive')
-          .set('X-Forwarded-For', ip);
+        const res = await request(server).get('/auth-sensitive').set('X-Forwarded-For', ip);
         expect(res.status).toBe(200);
       }
     });

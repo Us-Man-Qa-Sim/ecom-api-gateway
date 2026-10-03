@@ -11,6 +11,17 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import type {
   CreateAddressResponse,
   DeleteAddressRequest,
@@ -24,11 +35,23 @@ import { UserGrpcClient } from '../../grpc/user.client';
 import { callGrpc } from '../../common/grpc-call.util';
 import { toAddressView, toUserView } from '../../common/mappers/user.view';
 import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
+import {
+  AddressListResponse,
+  AddressResponse,
+  HttpErrorResponse,
+  UserResponse,
+} from '../../swagger/response-models';
 
 // /users/me and /users/me/addresses — all authenticated (the global
 // JwtAuthGuard enforces this because no @Public() marker is applied here).
 // Ownership checks live in the user-service; the gateway only forwards the
 // identity it already verified onto the gRPC metadata.
+@ApiTags('users')
+@ApiBearerAuth('bearer')
+@ApiUnauthorizedResponse({
+  description: 'Missing or invalid access token',
+  type: HttpErrorResponse,
+})
 @Controller('users/me')
 export class UsersController {
   constructor(
@@ -37,6 +60,9 @@ export class UsersController {
   ) {}
 
   @Get()
+  @ApiOperation({ summary: 'Return the authenticated user profile.' })
+  @ApiOkResponse({ type: UserResponse })
+  @ApiNotFoundResponse({ description: 'User not found', type: HttpErrorResponse })
   async getMe() {
     const response = await callGrpc<GetMeResponse>(
       this.users.service.getMe({}, this.metadata.build()),
@@ -48,6 +74,8 @@ export class UsersController {
   }
 
   @Get('addresses')
+  @ApiOperation({ summary: 'List all shipping addresses on the current account.' })
+  @ApiOkResponse({ type: AddressListResponse })
   async listAddresses() {
     const response = await callGrpc<ListAddressesResponse>(
       this.users.service.listAddresses({}, this.metadata.build()),
@@ -56,6 +84,8 @@ export class UsersController {
   }
 
   @Post('addresses')
+  @ApiOperation({ summary: 'Add a new shipping address.' })
+  @ApiCreatedResponse({ type: AddressResponse })
   async createAddress(@Body() body: CreateAddressDto) {
     const response = await callGrpc<CreateAddressResponse>(
       this.users.service.createAddress(
@@ -78,6 +108,10 @@ export class UsersController {
   }
 
   @Get('addresses/:id')
+  @ApiOperation({ summary: 'Get one address by id.' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: AddressResponse })
+  @ApiNotFoundResponse({ description: 'Address not found', type: HttpErrorResponse })
   async getAddress(@Param('id') id: string) {
     const response = await callGrpc<GetAddressResponse>(
       this.users.service.getAddress({ addressId: id }, this.metadata.build()),
@@ -89,6 +123,10 @@ export class UsersController {
   }
 
   @Patch('addresses/:id')
+  @ApiOperation({ summary: 'Partially update an address.' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: AddressResponse })
+  @ApiNotFoundResponse({ description: 'Address not found', type: HttpErrorResponse })
   async updateAddress(@Param('id') id: string, @Body() body: UpdateAddressDto) {
     const response = await callGrpc<UpdateAddressResponse>(
       this.users.service.updateAddress(
@@ -113,6 +151,9 @@ export class UsersController {
 
   @Delete('addresses/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete an address.' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiNoContentResponse({ description: 'Address deleted.' })
   async deleteAddress(@Param('id') id: string): Promise<void> {
     const request: DeleteAddressRequest = { addressId: id };
     await callGrpc(this.users.service.deleteAddress(request, this.metadata.build()));

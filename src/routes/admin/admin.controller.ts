@@ -12,6 +12,18 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiForbiddenResponse,
+  ApiNoContentResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import type {
   AdjustStockResponse,
   AttributesUpdate,
@@ -33,16 +45,25 @@ import { callGrpc } from '../../common/grpc-call.util';
 import { toOrderView } from '../../common/mappers/order.view';
 import { toPaginationView, toProductView } from '../../common/mappers/product.view';
 import { stringToProtoOrderStatus } from '../../common/mappers/proto.mapper';
-import {
-  AdjustStockDto,
-  CreateProductDto,
-  UpdateProductDto,
-} from './dto/product-admin.dto';
+import { AdjustStockDto, CreateProductDto, UpdateProductDto } from './dto/product-admin.dto';
 import { ListAllOrdersQueryDto } from '../orders/dto/list-orders.query';
+import {
+  HttpErrorResponse,
+  OrderListResponse,
+  OrderResponse,
+  ProductResponse,
+} from '../../swagger/response-models';
 
 // Everything under /admin/* requires the ADMIN role. The downstream services
 // also enforce their own ownership/role rules; this decorator exists so a
 // forgotten downstream check does not silently expose a destructive operation.
+@ApiTags('admin')
+@ApiBearerAuth('bearer')
+@ApiUnauthorizedResponse({
+  description: 'Missing or invalid access token',
+  type: HttpErrorResponse,
+})
+@ApiForbiddenResponse({ description: 'Caller is not an admin', type: HttpErrorResponse })
 @Controller('admin')
 @Roles('ADMIN')
 export class AdminController {
@@ -55,6 +76,8 @@ export class AdminController {
   // ---- Product admin ----------------------------------------------------
 
   @Post('products')
+  @ApiOperation({ summary: 'Create a product.' })
+  @ApiCreatedResponse({ type: ProductResponse })
   async createProduct(@Body() body: CreateProductDto) {
     const response = await callGrpc<CreateProductResponse>(
       this.products.service.createProduct(
@@ -77,6 +100,12 @@ export class AdminController {
   }
 
   @Patch('products/:id')
+  @ApiOperation({
+    summary: 'Partially update a product. Attributes/images are replace-or-leave-alone.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProductResponse })
+  @ApiNotFoundResponse({ description: 'Product not found', type: HttpErrorResponse })
   async updateProduct(@Param('id') id: string, @Body() body: UpdateProductDto) {
     // Proto wraps attributes/images in presence-carrying messages so an absent
     // field (don't touch) is distinguishable from an empty replacement.
@@ -109,6 +138,9 @@ export class AdminController {
 
   @Delete('products/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a product (hard delete).' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiNoContentResponse({ description: 'Product deleted.' })
   async deleteProduct(@Param('id') id: string): Promise<void> {
     await callGrpc<DeleteProductResponse>(
       this.products.service.deleteProduct({ productId: id }, this.metadata.build()),
@@ -116,6 +148,10 @@ export class AdminController {
   }
 
   @Post('products/:id/adjust-stock')
+  @ApiOperation({ summary: 'Admin restock (positive delta) or decrement (negative delta).' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ProductResponse })
+  @ApiNotFoundResponse({ description: 'Product not found', type: HttpErrorResponse })
   async adjustStock(@Param('id') id: string, @Body() body: AdjustStockDto) {
     const response = await callGrpc<AdjustStockResponse>(
       this.products.service.adjustStock(
@@ -132,6 +168,10 @@ export class AdminController {
   // ---- Order admin ------------------------------------------------------
 
   @Get('orders')
+  @ApiOperation({
+    summary: 'List all orders across customers (optionally filtered by status/user).',
+  })
+  @ApiOkResponse({ type: OrderListResponse })
   async listAllOrders(@Query() query: ListAllOrdersQueryDto) {
     const response = await callGrpc<ListAllOrdersResponse>(
       this.orders.service.listAllOrders(
@@ -151,6 +191,10 @@ export class AdminController {
 
   @Post('orders/:id/ship')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Transition a CONFIRMED order to SHIPPED.' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: OrderResponse })
+  @ApiNotFoundResponse({ description: 'Order not found', type: HttpErrorResponse })
   async shipOrder(@Param('id') id: string) {
     const response = await callGrpc<ShipOrderResponse>(
       this.orders.service.shipOrder({ orderId: id }, this.metadata.build()),
@@ -163,6 +207,10 @@ export class AdminController {
 
   @Post('orders/:id/deliver')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Transition a SHIPPED order to DELIVERED.' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: OrderResponse })
+  @ApiNotFoundResponse({ description: 'Order not found', type: HttpErrorResponse })
   async deliverOrder(@Param('id') id: string) {
     const response = await callGrpc<DeliverOrderResponse>(
       this.orders.service.deliverOrder({ orderId: id }, this.metadata.build()),

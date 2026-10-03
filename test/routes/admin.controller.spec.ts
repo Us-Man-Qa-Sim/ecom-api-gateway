@@ -69,7 +69,9 @@ function adjustStockDto(delta: number): AdjustStockDto {
   return dto;
 }
 
-function listAllOrdersQueryDto(overrides: Partial<ListAllOrdersQueryDto> = {}): ListAllOrdersQueryDto {
+function listAllOrdersQueryDto(
+  overrides: Partial<ListAllOrdersQueryDto> = {},
+): ListAllOrdersQueryDto {
   const q = new ListAllOrdersQueryDto();
   Object.assign(q, overrides);
   return q;

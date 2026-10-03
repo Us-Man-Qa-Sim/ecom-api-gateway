@@ -20,6 +20,14 @@ describe('env validation', () => {
     expect(env.CORS_CREDENTIALS).toBe(false);
     expect(env.BODY_LIMIT_JSON).toBe('100kb');
     expect(env.BODY_LIMIT_URLENCODED).toBe('100kb');
+    expect(env.SWAGGER_ENABLED).toBe(true);
+    expect(env.SWAGGER_PATH).toBe('docs');
+  });
+
+  it('parses SWAGGER_ENABLED case-insensitively (anything but "true" → false)', () => {
+    expect(validateEnv({ NODE_ENV: 'test', SWAGGER_ENABLED: 'false' }).SWAGGER_ENABLED).toBe(false);
+    expect(validateEnv({ NODE_ENV: 'test', SWAGGER_ENABLED: 'TRUE' }).SWAGGER_ENABLED).toBe(true);
+    expect(validateEnv({ NODE_ENV: 'test', SWAGGER_ENABLED: 'no' }).SWAGGER_ENABLED).toBe(false);
   });
 
   it('parses CORS_ORIGINS as a comma-separated allow-list and trims entries', () => {
@@ -27,10 +35,7 @@ describe('env validation', () => {
       NODE_ENV: 'test',
       CORS_ORIGINS: 'https://app.example.com, https://staging.example.com ,,',
     });
-    expect(env.CORS_ORIGINS).toEqual([
-      'https://app.example.com',
-      'https://staging.example.com',
-    ]);
+    expect(env.CORS_ORIGINS).toEqual(['https://app.example.com', 'https://staging.example.com']);
   });
 
   it('parses CORS_CREDENTIALS case-insensitively', () => {

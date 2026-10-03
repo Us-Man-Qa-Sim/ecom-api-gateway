@@ -10,6 +10,16 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import type {
   CancelOrderResponse,
   CreateOrderResponse,
@@ -25,9 +35,16 @@ import { stringToProtoOrderStatus } from '../../common/mappers/proto.mapper';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CancelOrderDto } from './dto/cancel-order.dto';
 import { ListMyOrdersQueryDto } from './dto/list-orders.query';
+import { HttpErrorResponse, OrderListResponse, OrderResponse } from '../../swagger/response-models';
 
 // Customer-facing order routes. All authenticated: ownership (list my orders,
 // cancel my order) is enforced by the order-service from the x-user-id header.
+@ApiTags('orders')
+@ApiBearerAuth('bearer')
+@ApiUnauthorizedResponse({
+  description: 'Missing or invalid access token',
+  type: HttpErrorResponse,
+})
 @Controller('orders')
 export class OrdersController {
   constructor(
@@ -36,6 +53,8 @@ export class OrdersController {
   ) {}
 
   @Post()
+  @ApiOperation({ summary: 'Place a new order. Starts PENDING until stock reservation resolves.' })
+  @ApiCreatedResponse({ type: OrderResponse })
   async create(@Body() body: CreateOrderDto) {
     const response = await callGrpc<CreateOrderResponse>(
       this.orders.service.createOrder(
@@ -56,6 +75,8 @@ export class OrdersController {
   }
 
   @Get()
+  @ApiOperation({ summary: 'List orders owned by the authenticated user.' })
+  @ApiOkResponse({ type: OrderListResponse })
   async listMine(@Query() query: ListMyOrdersQueryDto) {
     const response = await callGrpc<ListMyOrdersResponse>(
       this.orders.service.listMyOrders(
@@ -73,6 +94,13 @@ export class OrdersController {
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Fetch one of the caller’s orders by id.' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: OrderResponse })
+  @ApiNotFoundResponse({
+    description: 'Order not found or not owned by caller',
+    type: HttpErrorResponse,
+  })
   async get(@Param('id') id: string) {
     const response = await callGrpc<GetOrderResponse>(
       this.orders.service.getOrder({ orderId: id }, this.metadata.build()),
@@ -85,12 +113,16 @@ export class OrdersController {
 
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cancel an order the caller owns (PENDING or CONFIRMED only).' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: OrderResponse })
+  @ApiNotFoundResponse({
+    description: 'Order not found or not owned by caller',
+    type: HttpErrorResponse,
+  })
   async cancel(@Param('id') id: string, @Body() body: CancelOrderDto) {
     const response = await callGrpc<CancelOrderResponse>(
-      this.orders.service.cancelOrder(
-        { orderId: id, reason: body.reason },
-        this.metadata.build(),
-      ),
+      this.orders.service.cancelOrder({ orderId: id, reason: body.reason }, this.metadata.build()),
     );
     if (!response.order) {
       throw new BadRequestException('Invalid response from order service');
