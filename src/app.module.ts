@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { APP_FILTER } from '@nestjs/core';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import type { IncomingMessage } from 'node:http';
 import { validateEnv } from './config/env.validation';
@@ -48,6 +49,24 @@ import { AdminRoutesModule } from './routes/admin/admin-routes.module';
         },
       }),
     }),
+    // GW-8: in-memory rate limiting. The `default` throttler applies to every
+    // route; auth routes override it with a stricter @Throttle to blunt
+    // credential brute-forcing. In-memory means the budget is PER INSTANCE —
+    // behind a load balancer with N replicas, a client effectively gets N× the
+    // configured limit, which is fine as defence-in-depth; a Redis storage
+    // adapter can swap in later without touching the guard or routes.
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        throttlers: [
+          {
+            name: 'default',
+            ttl: config.getOrThrow<number>('THROTTLE_TTL_MS'),
+            limit: config.getOrThrow<number>('THROTTLE_LIMIT'),
+          },
+        ],
+      }),
+    }),
     AuthModule,
     GrpcModule,
     HealthModule,
@@ -62,6 +81,12 @@ import { AdminRoutesModule } from './routes/admin/admin-routes.module';
     // every REST route gets consistent error shapes without per-controller
     // UseFilters. GW-6 will add richer error payloads on top of this.
     { provide: APP_FILTER, useClass: GrpcToHttpExceptionFilter },
+    // GW-8: ThrottlerGuard as a global APP_GUARD so every HTTP route is
+    // covered without per-controller @UseGuards. It runs alongside the
+    // JwtAuthGuard (also APP_GUARD) and keys off the request IP by default;
+    // the @Public() decorator only exempts JWT, not throttling, so even
+    // unauthenticated /auth/* routes stay rate-limited.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

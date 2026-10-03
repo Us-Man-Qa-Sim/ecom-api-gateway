@@ -10,6 +10,7 @@ import { GrpcMetadataFactory } from '../../grpc/grpc-metadata.factory';
 import { UserGrpcClient } from '../../grpc/user.client';
 import { callGrpc } from '../../common/grpc-call.util';
 import { toAuthTokensView, toUserView } from '../../common/mappers/user.view';
+import { AuthThrottle } from '../../common/throttler/auth-throttle';
 import { LoginDto, LogoutDto, RefreshTokenDto, RegisterDto } from './dto/auth.dto';
 
 // Thin REST façade over the ecom.user.v1 auth RPCs. Request bodies are shaped
@@ -18,6 +19,11 @@ import { LoginDto, LogoutDto, RefreshTokenDto, RegisterDto } from './dto/auth.dt
 // reaches gRPC.
 @Controller('auth')
 @Public()
+// GW-8: credential-handling routes get the tighter AUTH_THROTTLE budget
+// (10/min by default) instead of the gateway's global 60/min baseline. The
+// class-level decorator covers register/login/refresh/logout — all of which
+// touch credentials or long-lived tokens.
+@AuthThrottle()
 export class AuthController {
   constructor(
     private readonly users: UserGrpcClient,

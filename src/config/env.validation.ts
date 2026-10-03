@@ -13,8 +13,23 @@ const numericString = (defaultValue: number) =>
       return parsed;
     });
 
-// Config surface for GW-1 → GW-3. GW-7/GW-8/GW-9 will extend this schema with
-// CORS origins, throttler settings and Swagger toggles as those tasks land.
+// CORS allow-list parser. The gateway sits behind NGINX in prod, but direct
+// browser access from the Next.js dev server (`http://localhost:3001` by
+// default) still has to be CORS-approved. The env var is comma-separated so
+// multiple origins (staging + prod + localhost) can be configured in one line.
+// Entries are trimmed and empties dropped so trailing commas don't matter.
+const corsOriginsSchema = z
+  .string()
+  .default('http://localhost:3001')
+  .transform((value) =>
+    value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0),
+  );
+
+// Config surface for GW-1 → GW-3 and GW-7. GW-8/GW-9 will extend this schema
+// further with throttler settings and Swagger toggles as those tasks land.
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
@@ -38,6 +53,33 @@ export const envSchema = z.object({
   // Small skew tolerance so freshly-issued tokens and near-expiry tokens do
   // not bounce when the two hosts' clocks disagree by a few seconds.
   JWT_CLOCK_TOLERANCE_SECONDS: numericString(5),
+
+  // CORS allow-list (GW-7). Comma-separated list of exact-match origins.
+  // Default covers the Next.js dev server; staging/prod set their real origins.
+  CORS_ORIGINS: corsOriginsSchema,
+  // Whether to send Access-Control-Allow-Credentials. Needed if the Next.js
+  // client ever stores the refresh token in a cookie (not the current plan,
+  // which keeps auth in Authorization headers, but keep the knob available).
+  CORS_CREDENTIALS: z
+    .string()
+    .default('false')
+    .transform((value) => value.toLowerCase() === 'true'),
+
+  // Request-size limits (GW-7). Keep JSON tight — the public API only accepts
+  // small payloads (login bodies, order items, address updates). URL-encoded
+  // mirrors JSON so stray form posts don't slip past the JSON cap.
+  BODY_LIMIT_JSON: z.string().default('100kb'),
+  BODY_LIMIT_URLENCODED: z.string().default('100kb'),
+
+  // Rate limiting (GW-8). In-memory store means limits are PER INSTANCE —
+  // behind a load balancer with N replicas, a client effectively gets N× the
+  // configured budget. That's acceptable here as a defence-in-depth layer; a
+  // Redis-backed storage can swap in later without touching routes/guards.
+  // Only the baseline is env-driven; stricter per-route limits (e.g. for
+  // auth routes) are expressed with @Throttle(AUTH_THROTTLE) using
+  // module-level constants since class decorators cannot read ConfigService.
+  THROTTLE_TTL_MS: numericString(60_000),
+  THROTTLE_LIMIT: numericString(60),
 });
 
 export type Env = z.infer<typeof envSchema>;

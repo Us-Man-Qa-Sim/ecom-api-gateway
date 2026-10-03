@@ -16,6 +16,41 @@ describe('env validation', () => {
     expect(env.JWT_ISSUER).toBe('user-service');
     expect(env.JWT_AUDIENCE).toBe('ecom-api');
     expect(env.JWT_CLOCK_TOLERANCE_SECONDS).toBe(5);
+    expect(env.CORS_ORIGINS).toEqual(['http://localhost:3001']);
+    expect(env.CORS_CREDENTIALS).toBe(false);
+    expect(env.BODY_LIMIT_JSON).toBe('100kb');
+    expect(env.BODY_LIMIT_URLENCODED).toBe('100kb');
+  });
+
+  it('parses CORS_ORIGINS as a comma-separated allow-list and trims entries', () => {
+    const env = validateEnv({
+      NODE_ENV: 'test',
+      CORS_ORIGINS: 'https://app.example.com, https://staging.example.com ,,',
+    });
+    expect(env.CORS_ORIGINS).toEqual([
+      'https://app.example.com',
+      'https://staging.example.com',
+    ]);
+  });
+
+  it('parses CORS_CREDENTIALS case-insensitively', () => {
+    expect(validateEnv({ NODE_ENV: 'test', CORS_CREDENTIALS: 'true' }).CORS_CREDENTIALS).toBe(true);
+    expect(validateEnv({ NODE_ENV: 'test', CORS_CREDENTIALS: 'TRUE' }).CORS_CREDENTIALS).toBe(true);
+    expect(validateEnv({ NODE_ENV: 'test', CORS_CREDENTIALS: 'false' }).CORS_CREDENTIALS).toBe(
+      false,
+    );
+    // Anything else resolves to false — safer default than true.
+    expect(validateEnv({ NODE_ENV: 'test', CORS_CREDENTIALS: 'yes' }).CORS_CREDENTIALS).toBe(false);
+  });
+
+  it('honours body-limit overrides', () => {
+    const env = validateEnv({
+      NODE_ENV: 'test',
+      BODY_LIMIT_JSON: '250kb',
+      BODY_LIMIT_URLENCODED: '50kb',
+    });
+    expect(env.BODY_LIMIT_JSON).toBe('250kb');
+    expect(env.BODY_LIMIT_URLENCODED).toBe('50kb');
   });
 
   it('coerces HTTP_PORT to a number', () => {
