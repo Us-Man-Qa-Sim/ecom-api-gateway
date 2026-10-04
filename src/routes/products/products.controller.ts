@@ -68,7 +68,8 @@ export class ProductsController {
           pagination: { page: query.page, pageSize: query.pageSize },
           category: query.category,
           search: query.search,
-          isActive: query.isActive,
+          // Public browse never exposes deactivated products.
+          isActive: true,
           minPriceMinor: query.minPriceMinor,
           maxPriceMinor: query.maxPriceMinor,
         },
@@ -84,7 +85,11 @@ export class ProductsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Fetch one product by id.' })
-  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiParam({
+    name: 'id',
+    description: 'MongoDB ObjectId (24 hex chars)',
+    example: '665f1c2e8b3a4d0012ab34cd',
+  })
   @ApiOkResponse({ type: ProductResponse })
   @ApiNotFoundResponse({ description: 'Product not found', type: HttpErrorResponse })
   async get(@Param('id') id: string) {

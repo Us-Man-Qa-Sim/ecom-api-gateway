@@ -1,13 +1,11 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
-import {
-  emptyStringToUndefined,
-  toBooleanOrOriginal,
-  toIntOrOriginal,
-} from '../../../common/dto/transforms';
+import { emptyStringToUndefined, toIntOrOriginal } from '../../../common/dto/transforms';
 
+// No `isActive` filter: the public catalog only ever shows active products —
+// the controller pins `isActive: true` on every ListProducts call.
 export class ListProductsQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({ maxLength: 100, example: 'shoes' })
   @IsOptional()
@@ -22,12 +20,6 @@ export class ListProductsQueryDto extends PaginationQueryDto {
   @IsString()
   @MaxLength(200)
   search?: string;
-
-  @ApiPropertyOptional({ example: true })
-  @IsOptional()
-  @Transform(toBooleanOrOriginal)
-  @IsBoolean({ message: 'isActive must be a boolean' })
-  isActive?: boolean;
 
   @ApiPropertyOptional({ minimum: 0, example: 1000 })
   @IsOptional()

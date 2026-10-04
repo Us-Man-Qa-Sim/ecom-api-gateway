@@ -140,7 +140,6 @@ describe('ValidationPipe', () => {
         pageSize: '50',
         category: 'books',
         search: 'ring',
-        isActive: 'true',
         minPriceMinor: '100',
         maxPriceMinor: '500',
       });
@@ -149,19 +148,18 @@ describe('ValidationPipe', () => {
         pageSize: 50,
         category: 'books',
         search: 'ring',
-        isActive: true,
         minPriceMinor: 100,
         maxPriceMinor: 500,
       });
     });
 
-    it('rejects a non-boolean isActive', async () => {
-      await expectBadRequest(() => runQuery(ListProductsQueryDto, { isActive: 'yes' }));
+    it('rejects isActive — the public catalog is always active-only', async () => {
+      await expectBadRequest(() => runQuery(ListProductsQueryDto, { isActive: 'false' }));
     });
 
     it('treats empty strings as absent for optional filters', async () => {
-      const out = await runQuery(ListProductsQueryDto, { category: '', search: '', isActive: '' });
-      expect(out).toMatchObject({ category: undefined, search: undefined, isActive: undefined });
+      const out = await runQuery(ListProductsQueryDto, { category: '', search: '' });
+      expect(out).toMatchObject({ category: undefined, search: undefined });
     });
   });
 

@@ -106,7 +106,11 @@ export class AdminController {
   @ApiOperation({
     summary: 'Partially update a product. Attributes/images are replace-or-leave-alone.',
   })
-  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiParam({
+    name: 'id',
+    description: 'MongoDB ObjectId (24 hex chars)',
+    example: '665f1c2e8b3a4d0012ab34cd',
+  })
   @ApiOkResponse({ type: ProductResponse })
   @ApiNotFoundResponse({ description: 'Product not found', type: HttpErrorResponse })
   async updateProduct(@Param('id') id: string, @Body() body: UpdateProductDto) {
@@ -144,7 +148,11 @@ export class AdminController {
   @Delete('products/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a product (hard delete).' })
-  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiParam({
+    name: 'id',
+    description: 'MongoDB ObjectId (24 hex chars)',
+    example: '665f1c2e8b3a4d0012ab34cd',
+  })
   @ApiNoContentResponse({ description: 'Product deleted.' })
   async deleteProduct(@Param('id') id: string): Promise<void> {
     // fast: single-document delete.
@@ -156,7 +164,11 @@ export class AdminController {
 
   @Post('products/:id/adjust-stock')
   @ApiOperation({ summary: 'Admin restock (positive delta) or decrement (negative delta).' })
-  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiParam({
+    name: 'id',
+    description: 'MongoDB ObjectId (24 hex chars)',
+    example: '665f1c2e8b3a4d0012ab34cd',
+  })
   @ApiOkResponse({ type: ProductResponse })
   @ApiNotFoundResponse({ description: 'Product not found', type: HttpErrorResponse })
   async adjustStock(@Param('id') id: string, @Body() body: AdjustStockDto) {

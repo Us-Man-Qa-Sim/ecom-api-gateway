@@ -37,7 +37,11 @@ describe('ProductsController', () => {
       makeTimeouts(),
     );
     const result = await ctrl.list(makeQuery());
-    expect(listProducts.mock.calls[0][0]).toMatchObject({ pagination: { page: 1, pageSize: 20 } });
+    expect(listProducts.mock.calls[0][0]).toMatchObject({
+      pagination: { page: 1, pageSize: 20 },
+      // Public browse is pinned to active products only.
+      isActive: true,
+    });
     expect(result.products[0]).toMatchObject({
       id: 'p-1',
       price: { amountMinor: 1000, currency: 'EUR' },
@@ -58,7 +62,6 @@ describe('ProductsController', () => {
         pageSize: 50,
         category: 'books',
         search: 'ring',
-        isActive: true,
         minPriceMinor: 100,
         maxPriceMinor: 500,
       }),

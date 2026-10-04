@@ -133,31 +133,31 @@ Each wrapper resolves its typed service handle in `onModuleInit()` and exposes i
 
 Every route except the ones explicitly marked `@Public()` requires a valid access token. Admin routes additionally require `role=ADMIN` via `@Roles('ADMIN')`. Request bodies and query strings are validated by class-validator DTOs (unknown fields → `400` with a per-field `errors[]`) before anything reaches gRPC.
 
-| Method | Path                               | Auth   | Downstream RPC                 |
-| ------ | ---------------------------------- | ------ | ------------------------------ |
-| POST   | `/auth/register`                   | public | `UserService.Register`         |
-| POST   | `/auth/login`                      | public | `UserService.Login`            |
-| POST   | `/auth/refresh`                    | public | `UserService.RefreshToken`     |
-| POST   | `/auth/logout`                     | public | `UserService.Logout`           |
-| GET    | `/users/me`                        | user   | `UserService.GetMe`            |
-| GET    | `/users/me/addresses`              | user   | `UserService.ListAddresses`    |
-| POST   | `/users/me/addresses`              | user   | `UserService.CreateAddress`    |
-| GET    | `/users/me/addresses/:id`          | user   | `UserService.GetAddress`       |
-| PATCH  | `/users/me/addresses/:id`          | user   | `UserService.UpdateAddress`    |
-| DELETE | `/users/me/addresses/:id`          | user   | `UserService.DeleteAddress`    |
-| GET    | `/products`                        | public | `ProductService.ListProducts`  |
-| GET    | `/products/:id`                    | public | `ProductService.GetProduct`    |
-| POST   | `/orders`                          | user   | `OrderService.CreateOrder`     |
-| GET    | `/orders`                          | user   | `OrderService.ListMyOrders`    |
-| GET    | `/orders/:id`                      | user   | `OrderService.GetOrder`        |
-| POST   | `/orders/:id/cancel`               | user   | `OrderService.CancelOrder`     |
-| POST   | `/admin/products`                  | admin  | `ProductService.CreateProduct` |
-| PATCH  | `/admin/products/:id`              | admin  | `ProductService.UpdateProduct` |
-| DELETE | `/admin/products/:id`              | admin  | `ProductService.DeleteProduct` |
-| POST   | `/admin/products/:id/adjust-stock` | admin  | `ProductService.AdjustStock`   |
-| GET    | `/admin/orders`                    | admin  | `OrderService.ListAllOrders`   |
-| POST   | `/admin/orders/:id/ship`           | admin  | `OrderService.ShipOrder`       |
-| POST   | `/admin/orders/:id/deliver`        | admin  | `OrderService.DeliverOrder`    |
+| Method | Path                               | Auth   | Downstream RPC                                          |
+| ------ | ---------------------------------- | ------ | ------------------------------------------------------- |
+| POST   | `/auth/register`                   | public | `UserService.Register`                                  |
+| POST   | `/auth/login`                      | public | `UserService.Login`                                     |
+| POST   | `/auth/refresh`                    | public | `UserService.RefreshToken`                              |
+| POST   | `/auth/logout`                     | public | `UserService.Logout`                                    |
+| GET    | `/users/me`                        | user   | `UserService.GetMe`                                     |
+| GET    | `/users/me/addresses`              | user   | `UserService.ListAddresses`                             |
+| POST   | `/users/me/addresses`              | user   | `UserService.CreateAddress`                             |
+| GET    | `/users/me/addresses/:id`          | user   | `UserService.GetAddress`                                |
+| PATCH  | `/users/me/addresses/:id`          | user   | `UserService.UpdateAddress`                             |
+| DELETE | `/users/me/addresses/:id`          | user   | `UserService.DeleteAddress`                             |
+| GET    | `/products`                        | public | `ProductService.ListProducts` (always `isActive: true`) |
+| GET    | `/products/:id`                    | public | `ProductService.GetProduct`                             |
+| POST   | `/orders`                          | user   | `OrderService.CreateOrder`                              |
+| GET    | `/orders`                          | user   | `OrderService.ListMyOrders`                             |
+| GET    | `/orders/:id`                      | user   | `OrderService.GetOrder`                                 |
+| POST   | `/orders/:id/cancel`               | user   | `OrderService.CancelOrder`                              |
+| POST   | `/admin/products`                  | admin  | `ProductService.CreateProduct`                          |
+| PATCH  | `/admin/products/:id`              | admin  | `ProductService.UpdateProduct`                          |
+| DELETE | `/admin/products/:id`              | admin  | `ProductService.DeleteProduct`                          |
+| POST   | `/admin/products/:id/adjust-stock` | admin  | `ProductService.AdjustStock`                            |
+| GET    | `/admin/orders`                    | admin  | `OrderService.ListAllOrders`                            |
+| POST   | `/admin/orders/:id/ship`           | admin  | `OrderService.ShipOrder`                                |
+| POST   | `/admin/orders/:id/deliver`        | admin  | `OrderService.DeliverOrder`                             |
 
 Shared response shapes:
 

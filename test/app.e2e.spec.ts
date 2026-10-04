@@ -170,5 +170,11 @@ describe('api-gateway (e2e)', () => {
       const res = await request(app.getHttpServer()).get('/products?bogus=1').expect(400);
       expect(res.body.errors).toEqual([expect.objectContaining({ field: 'bogus' })]);
     });
+
+    it('does not let public callers opt into inactive products', async () => {
+      const res = await request(app.getHttpServer()).get('/products?isActive=false').expect(400);
+      expect(res.body.errors).toEqual([expect.objectContaining({ field: 'isActive' })]);
+      expect(listProducts).not.toHaveBeenCalled();
+    });
   });
 });
