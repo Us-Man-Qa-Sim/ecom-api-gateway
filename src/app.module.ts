@@ -28,6 +28,7 @@ import { AdminRoutesModule } from './routes/admin/admin-routes.module';
     }),
     RequestContextModule,
     LoggerModule.forRootAsync({
+      imports: [RequestContextModule],
       inject: [RequestContextService],
       useFactory: (requestContext: RequestContextService) => ({
         pinoHttp: {
