@@ -11,6 +11,7 @@ import { GrpcModule } from './grpc/grpc.module';
 import { RequestContextModule } from './context/request-context.module';
 import { HEADER_REQUEST_ID } from './context/request-context';
 import { resolveRequestId } from './context/request-context.middleware';
+import { RequestContextService } from './context/request-context.service';
 import { GrpcToHttpExceptionFilter } from './common/errors/grpc-to-http.filter';
 import { AuthRoutesModule } from './routes/auth/auth-routes.module';
 import { UsersRoutesModule } from './routes/users/users-routes.module';
@@ -27,7 +28,8 @@ import { AdminRoutesModule } from './routes/admin/admin-routes.module';
     }),
     RequestContextModule,
     LoggerModule.forRootAsync({
-      useFactory: () => ({
+      inject: [RequestContextService],
+      useFactory: (requestContext: RequestContextService) => ({
         pinoHttp: {
           level: process.env.LOG_LEVEL ?? 'info',
           transport:
@@ -35,12 +37,10 @@ import { AdminRoutesModule } from './routes/admin/admin-routes.module';
               ? undefined
               : { target: 'pino-pretty', options: { singleLine: true, colorize: true } },
           customProps: () => ({ service: 'api-gateway' }),
-          // nestjs-pino's middleware runs BEFORE RequestContextMiddleware
-          // (module import order does not change that), so the id has to be
-          // canonicalised here: accept a sane client-supplied x-request-id or
-          // mint one, and write it back so the context middleware — which
-          // calls the same idempotent resolver — forwards the identical value
-          // on gRPC metadata and in the response header.
+          mixin: () => {
+            const ctx = requestContext.get();
+            return ctx ? { correlationId: ctx.requestId } : {};
+          },
           genReqId: (req: IncomingMessage, res: ServerResponse) => {
             const requestId = resolveRequestId(req.headers[HEADER_REQUEST_ID]);
             req.headers[HEADER_REQUEST_ID] = requestId;
