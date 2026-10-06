@@ -68,6 +68,9 @@ const ROUND_ROBIN_SERVICE_CONFIG = JSON.stringify({
               package: [ECOM_ORDER_V1_PACKAGE_NAME],
               protoPath: [PROTO_FILES.order, PROTO_FILES.common],
               loader: GRPC_LOADER_OPTIONS,
+              channelOptions: {
+                'grpc.service_config': ROUND_ROBIN_SERVICE_CONFIG,
+              },
             },
           }),
         },
