@@ -1,0 +1,19 @@
+meta {
+  name: List Addresses
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/users/me/addresses
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+assert {
+  res.status: eq 200
+}

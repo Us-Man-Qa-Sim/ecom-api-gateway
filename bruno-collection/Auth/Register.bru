@@ -1,0 +1,24 @@
+meta {
+  name: Register
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/auth/register
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "usmanqasim0900@gmail.com",
+    "password": "Aa@090078601",
+    "firstName": "Usman",
+    "lastName": "Qasim"
+  }
+}
+
+assert {
+  res.status: eq 201
+}

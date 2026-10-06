@@ -1,0 +1,25 @@
+meta {
+  name: Adjust Stock
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/admin/products/{{productId}}/adjust-stock
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminAccessToken}}
+}
+
+body:json {
+  {
+    "delta": 50
+  }
+}
+
+assert {
+  res.status: eq 200
+}

@@ -1,0 +1,15 @@
+meta {
+  name: Get Product by ID
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/products/{{productId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}

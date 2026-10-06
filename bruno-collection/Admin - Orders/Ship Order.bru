@@ -1,0 +1,23 @@
+meta {
+  name: Ship Order
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/admin/orders/{{orderId}}/ship
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminAccessToken}}
+}
+
+vars:pre-request {
+  adminAccessToken: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IjRZMXF1OXpTYlJxQ3diZEEifQ.eyJyb2xlIjoiQURNSU4iLCJlbWFpbCI6InVzbWFucWFzaW0wOTAwQGdtYWlsLmNvbSIsInN1YiI6IjA1ZmIwYTAzLTViNTktNDRhZi05NWE0LWFjZTY0MGUzNDAzMSIsImlzcyI6InVzZXItc2VydmljZSIsImF1ZCI6ImVjb20tYXBpIiwiaWF0IjoxNzkxMjgzMjc0LCJleHAiOjE3OTEyODQxNzR9.dnSkUWnpkcCd7J9WoRq-W6SHXxFG5X3YOcupQEkCbfoZOXYY9Vt2Qh_CE21Fp336gLIlrxvjMu7oNU07-Gwn4PZ__3KH5_3p6gDVFUL66lGFR4YuAkk8bL0inzrLjNyUxwL9FQejtp8J8H55spLfsxpivB4DwAPj5OqpXyNfTr4irWn79suL5ScMOBtEYTRc82quPCJ6QDThXFtIheKpJipMnc7rrdE-Er0zjyIgdRMIzhH1NbKrYgdZwwuf3vSJl_YDtcevGvwKntcHf4sbrUuq_OWT0p1TeKibuKFYkJSvIOqHhSGW0qAuPs6t4LS7zi_AFHNEFDSJMMrJCfwvcQ
+}
+
+assert {
+  res.status: eq 200
+}

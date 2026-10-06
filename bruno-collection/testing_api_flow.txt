@@ -1,0 +1,13 @@
+Suggested test flow: 
+
+> Health 
+> Register 
+> Login 
+> Login (Admin) 
+> Create Product 
+> List Products 
+> Create Address 
+> Create Order 
+> List My Orders 
+> Ship Order 
+> Deliver Order

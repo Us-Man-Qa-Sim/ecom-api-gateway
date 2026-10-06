@@ -1,0 +1,19 @@
+meta {
+  name: Get Address by ID
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/users/me/addresses/{{addressId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+assert {
+  res.status: eq 200
+}

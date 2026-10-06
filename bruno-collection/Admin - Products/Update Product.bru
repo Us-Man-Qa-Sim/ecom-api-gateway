@@ -1,0 +1,30 @@
+meta {
+  name: Update Product
+  type: http
+  seq: 2
+}
+
+patch {
+  url: {{baseUrl}}/admin/products/{{productId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminAccessToken}}
+}
+
+body:json {
+  {
+    "name": "Wireless Headphones Pro",
+    "price": {
+      "amountMinor": 12999,
+      "currency": "USD"
+    },
+    "isActive": true
+  }
+}
+
+assert {
+  res.status: eq 200
+}

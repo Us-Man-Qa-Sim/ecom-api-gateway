@@ -1,0 +1,20 @@
+meta {
+  name: Liveness Probe
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/health/live
+  body: none
+  auth: none
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3000
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq ok
+}

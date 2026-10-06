@@ -1,0 +1,24 @@
+meta {
+  name: List Products
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/products
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  pageSize: 20
+  ~category:
+  ~search:
+  ~minPriceMinor:
+  ~maxPriceMinor:
+}
+
+assert {
+  res.status: eq 200
+}

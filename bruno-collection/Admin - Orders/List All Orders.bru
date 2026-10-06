@@ -1,0 +1,26 @@
+meta {
+  name: List All Orders
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/admin/orders
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminAccessToken}}
+}
+
+params:query {
+  page: 1
+  pageSize: 20
+  ~status:
+  ~userId:
+}
+
+assert {
+  res.status: eq 200
+}

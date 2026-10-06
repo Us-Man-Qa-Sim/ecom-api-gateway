@@ -1,0 +1,29 @@
+meta {
+  name: Update Address
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{baseUrl}}/users/me/addresses/{{addressId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+body:json {
+  {
+    "label": "Office",
+    "street": "456 Business Ave",
+    "city": "San Francisco",
+    "state": "CA",
+    "postalCode": "94105"
+  }
+}
+
+assert {
+  res.status: eq 200
+}
