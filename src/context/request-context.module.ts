@@ -1,6 +1,5 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_INTERCEPTOR } from '@nestjs/core';
-import { InstanceIdInterceptor } from './instance-id.interceptor';
 import { RequestContextInterceptor } from './request-context.interceptor';
 import { RequestContextMiddleware } from './request-context.middleware';
 import { RequestContextService } from './request-context.service';
@@ -9,7 +8,6 @@ import { RequestContextService } from './request-context.service';
   providers: [
     RequestContextService,
     { provide: APP_INTERCEPTOR, useClass: RequestContextInterceptor },
-    { provide: APP_INTERCEPTOR, useClass: InstanceIdInterceptor },
   ],
   exports: [RequestContextService],
 })

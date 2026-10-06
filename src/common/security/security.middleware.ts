@@ -1,6 +1,10 @@
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
+import {
+  HEADER_GATEWAY_INSTANCE,
+  instanceIdMiddleware,
+} from '../../context/instance-id.middleware';
 
 // GW-7: public-edge hardening — Helmet, CORS, and request-size caps.
 //
@@ -18,6 +22,10 @@ export function applySecurityMiddleware(app: NestExpressApplication, config: Con
   // Must be set before any request is handled: ThrottlerGuard keys on req.ip,
   // and req.ip only honours X-Forwarded-For when the proxy is trusted.
   app.set('trust proxy', trustProxy);
+
+  // First in the chain so every response, including errors raised by the
+  // middleware below, says which gateway replica produced it.
+  app.use(instanceIdMiddleware());
 
   // Helmet with its defaults: HSTS, X-Content-Type-Options, Referrer-Policy,
   // X-Frame-Options=SAMEORIGIN, and a conservative CSP. The gateway serves
@@ -46,7 +54,7 @@ export function applySecurityMiddleware(app: NestExpressApplication, config: Con
     credentials: corsCredentials,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Authorization', 'Content-Type', 'x-request-id'],
-    exposedHeaders: ['x-request-id', 'x-gateway-instance'],
+    exposedHeaders: ['x-request-id', HEADER_GATEWAY_INSTANCE],
     maxAge: 600,
   });
 

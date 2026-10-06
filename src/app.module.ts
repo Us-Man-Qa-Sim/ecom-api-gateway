@@ -4,6 +4,7 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { hostname } from 'node:os';
 import { validateEnv } from './config/env.validation';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
@@ -37,7 +38,7 @@ import { AdminRoutesModule } from './routes/admin/admin-routes.module';
             process.env.NODE_ENV === 'production'
               ? undefined
               : { target: 'pino-pretty', options: { singleLine: true, colorize: true } },
-          customProps: () => ({ service: 'api-gateway' }),
+          customProps: () => ({ service: 'api-gateway', instanceId: hostname() }),
           mixin: () => {
             const ctx = requestContext.get();
             return ctx ? { correlationId: ctx.requestId } : {};

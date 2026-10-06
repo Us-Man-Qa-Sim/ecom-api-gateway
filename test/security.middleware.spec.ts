@@ -2,6 +2,7 @@ import { Body, Controller, Get, Module, Post, Req } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { hostname } from 'node:os';
 import request from 'supertest';
 import { applySecurityMiddleware } from '../src/common/security/security.middleware';
 import { validateEnv } from '../src/config/env.validation';
@@ -178,6 +179,43 @@ describe('applySecurityMiddleware', () => {
         .set('Content-Type', 'application/json')
         .send({ big });
       expect(res.status).toBe(413);
+    });
+  });
+
+  describe('x-gateway-instance header (LB-2)', () => {
+    let app: NestExpressApplication;
+
+    beforeAll(async () => {
+      app = await makeApp({ BODY_LIMIT_JSON: '1kb', CORS_ORIGINS: 'http://localhost:3001' });
+    });
+    afterAll(async () => {
+      await app.close();
+    });
+
+    it('names the serving instance on a normal response', async () => {
+      const res = await request(app.getHttpServer()).get('/');
+      expect(res.status).toBe(200);
+      expect(res.headers['x-gateway-instance']).toBe(hostname());
+    });
+
+    it('is present on responses that never reach a route handler', async () => {
+      const notFound = await request(app.getHttpServer()).get('/no-such-route');
+      expect(notFound.status).toBe(404);
+      expect(notFound.headers['x-gateway-instance']).toBe(hostname());
+
+      const tooLarge = await request(app.getHttpServer())
+        .post('/echo')
+        .set('Content-Type', 'application/json')
+        .send(JSON.stringify({ blob: 'x'.repeat(2048) }));
+      expect(tooLarge.status).toBe(413);
+      expect(tooLarge.headers['x-gateway-instance']).toBe(hostname());
+    });
+
+    it('is readable by browser clients via CORS', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/')
+        .set('Origin', 'http://localhost:3001');
+      expect(res.headers['access-control-expose-headers']).toContain('x-gateway-instance');
     });
   });
 
