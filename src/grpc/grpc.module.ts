@@ -15,17 +15,13 @@ import { OrderGrpcClient } from './order.client';
 import { GrpcHealthIndicator } from './grpc-health.indicator';
 import { GrpcMetadataFactory } from './grpc-metadata.factory';
 
-// One ClientsModule.registerAsync entry per downstream service. All three
-// share the `common.proto` include so message types cross-referenced from the
-// service protos resolve. The @grpc/proto-loader options come from contracts
-// so ts-proto's field naming and Nest's runtime decoder stay in sync.
+const ROUND_ROBIN_SERVICE_CONFIG = JSON.stringify({
+  loadBalancingConfig: [{ round_robin: {} }],
+});
+
 @Module({
   imports: [
     RequestContextModule,
-    // GrpcHealthIndicator injects Terminus' HealthIndicatorService, so the
-    // module that provides the indicator has to import Terminus itself —
-    // HealthModule importing it is not enough (Nest resolves providers in
-    // their declaring module).
     TerminusModule,
     ClientsModule.registerAsync({
       isGlobal: false,
@@ -55,6 +51,9 @@ import { GrpcMetadataFactory } from './grpc-metadata.factory';
               package: [ECOM_PRODUCT_V1_PACKAGE_NAME],
               protoPath: [PROTO_FILES.product, PROTO_FILES.common],
               loader: GRPC_LOADER_OPTIONS,
+              channelOptions: {
+                'grpc.service_config': ROUND_ROBIN_SERVICE_CONFIG,
+              },
             },
           }),
         },
