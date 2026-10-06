@@ -46,7 +46,7 @@ export function applySecurityMiddleware(app: NestExpressApplication, config: Con
     credentials: corsCredentials,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Authorization', 'Content-Type', 'x-request-id'],
-    exposedHeaders: ['x-request-id'],
+    exposedHeaders: ['x-request-id', 'x-gateway-instance'],
     maxAge: 600,
   });
 
